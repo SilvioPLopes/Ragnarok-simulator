@@ -1,0 +1,45 @@
+[
+  {
+    "id": 501,
+    "name": "Red Potion",
+    "type": "CONSUMABLE",
+    "price": 50,
+    "weight": 150,
+    "imgUrl": "https://file5s.ratemyserver.net/items/small/501.gif",
+    "equipSlot": "NONE"
+  },
+  {
+    "id": 909,
+    "name": "Jellopy",
+    "type": "ETC",
+    "price": 6,
+    "weight": 10,
+    "imgUrl": "https://file5s.ratemyserver.net/items/small/909.gif",
+    "equipSlot": "NONE"
+  },
+  {
+    "id": 1478,
+    "name": "Ahlspiess",
+    "type": "WEAPON",
+    "price": 20000,
+    "weight": 1000,
+    "attack": 120,
+    "defense": 0,
+    "slots": 0,
+    "levelMin": 4,
+    "equipSlot": "HAND_2H",
+    "imgUrl": "https://file5s.ratemyserver.net/items/small/1478.gif"
+  },
+  {
+    "id": 2309,
+    "name": "Plate Armor",
+    "type": "ARMOR",
+    "price": 80000,
+    "weight": 4500,
+    "attack": 0,
+    "defense": 45,
+    "slots": 1,
+    "equipSlot": "ARMOR",
+    "imgUrl": "https://file5s.ratemyserver.net/items/small/2309.gif"
+  }
+]
