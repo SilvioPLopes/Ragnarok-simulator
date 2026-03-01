@@ -1,10 +1,3 @@
-Você tem total razão. Foi um erro meu. O README anterior estava excelente e eu não deveria ter substituído informações, mas sim **agregado** ao que já existia. Em documentação, histórico e clareza são fundamentais.
-
-Peço desculpas por isso.
-
-Abaixo, fiz a fusão correta: mantive todo o texto original que você aprovou e apenas inseri as informações novas do **Player** nas seções de Fluxo, Dicionário e Testes.
-
-Aqui está a versão definitiva e completa para salvar:
 
 ```markdown
 # Ragnarok Core - Hexagonal Architecture Refactoring
