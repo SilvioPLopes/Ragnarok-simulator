@@ -46,26 +46,20 @@ public class ItemService {
         }
     }
 
-    // Lógica Unificada: Equipar (com Auto-Swap) e Desequipar
     private String gerenciarEquipamento(PlayerItemEntity itemAlvo) {
-        // 1. Se já está equipado, desequipa
-        if (itemAlvo.getEquipped()) { // Corrigido para isEquipped()
+        if (itemAlvo.getEquipped()) {
             itemAlvo.setEquipped(false);
             playerItemRepository.save(itemAlvo);
-            return "Item desequipado.";
+            return "Item desequipado: " + itemAlvo.getItem().getName();
         }
 
-        // 2. Lógica de Equipar (Segurança)
         if (!itemAlvo.getPlayer().getId().equals(itemAlvo.getPlayer().getId())) {
             throw new IllegalStateException("Tentativa de equipar item de outro jogador!");
         }
 
-        // 3. Verifica Slot e Auto-Swap
-        // ATENÇÃO: Certifique-se que ItemEntity/Item tem o campo 'equipSlot'
         EquipSlot slotAlvo = itemAlvo.getItem().getEquipSlot();
 
         if (slotAlvo != null && slotAlvo != EquipSlot.NONE) {
-            // Busca itens já equipados deste jogador
             List<PlayerItemEntity> equipados = playerItemRepository.findByPlayerIdAndEquippedTrue(itemAlvo.getPlayer().getId());
 
             for (PlayerItemEntity itemAtual : equipados) {

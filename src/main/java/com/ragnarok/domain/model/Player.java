@@ -62,4 +62,7 @@ public class Player {
         int base = (stats != null && stats.getLuk() != null)? stats.getLuk() : 0;
         return base + getEquipments().stream().mapToInt(i -> (i.getItemDefinition().getStats() != null && i.getItemDefinition().getStats().getBonusLuk() != null) ? i.getItemDefinition().getStats().getBonusLuk() : 0).sum();
     }
+    public Integer getMaxHp() {
+        return this.stats != null && this.stats.getMaxHp() != null ? this.stats.getMaxHp() : 100;
+    }
 }

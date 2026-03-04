@@ -6,14 +6,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class LevelingService {
 
-    // REGRA SIMPLES: Exp Necessária = Nível Atual * 100
-    // Ex: Lv 1 precisa de 100. Lv 2 precisa de 200.
+
     public long calculateRequiredBaseExp(int currentLevel) {
         return (long) currentLevel * 100;
     }
 
     public long calculateRequiredJobExp(int currentLevel) {
-        return (long) currentLevel * 100; // Mesma regra para simplificar por enquanto
+        return (long) currentLevel * 100;
     }
 
     public String processarExperiencia(Player player, long gainedBaseExp, long gainedJobExp) {
@@ -36,7 +35,6 @@ public class LevelingService {
             log.append("\n🎉 LEVEL UP! Nível Base ").append(player.getBaseLevel()).append(" alcançado!");
             log.append(" (+5 Pontos de Status)");
 
-            // Cura total ao upar (Regra clássica de cortesia)
             player.setHpCurrent(player.getStats().getMaxHp());
             player.setSpCurrent(player.getStats().getMaxSp());
         }

@@ -1,4 +1,4 @@
-package com.ragnarok.infrastructure.client.mapper;
+package com.ragnarok.infrastructure.persistence.mapper;
 
 import com.ragnarok.domain.model.*;
 import com.ragnarok.infrastructure.client.mapper.ItemMapper;
@@ -46,9 +46,7 @@ public class PlayerMapper {
         stats.setIntVal(entity.getIntelligence() != null ? entity.getIntelligence() : 1);
         stats.setDex(entity.getDex() != null ? entity.getDex() : 1);
         stats.setLuk(entity.getLuk() != null ? entity.getLuk() : 1);
-        stats.setHp(entity.getHpCurrent()); // Usa current como base se max for null, ou lógica de max
         stats.setMaxHp(entity.getHpMax() != null ? entity.getHpMax() : 100);
-        stats.setSp(entity.getSpCurrent());
         stats.setMaxSp(entity.getSpMax() != null ? entity.getSpMax() : 40);
         player.setStats(stats);
 
