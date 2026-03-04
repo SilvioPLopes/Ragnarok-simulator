@@ -9,6 +9,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -17,15 +18,20 @@ public class RathenaImporter implements CommandLineRunner {
 
     private static final String MOB_DB_URL =
             "https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/mob_db.yml";
-    private static final String ITEM_DB_URL =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/item_db.yml";
+
+    // O item_db.yml principal não tem itens — ele importa 3 arquivos separados
+    private static final String ITEM_DB_USABLE =
+            "https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/item_db_usable.yml";
+    private static final String ITEM_DB_EQUIP =
+            "https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/item_db_equip.yml";
+    private static final String ITEM_DB_ETC =
+            "https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/item_db_etc.yml";
 
     private final MonsterRepository monsterRepo;
     private final ItemRepository itemRepo;
     private final MobDbParser mobParser;
     private final ItemDbParser itemParser;
 
-    // ADICIONADO: construtor que o Spring usa para injetar as dependências
     public RathenaImporter(MonsterRepository monsterRepo,
                            ItemRepository itemRepo,
                            MobDbParser mobParser,
@@ -50,13 +56,25 @@ public class RathenaImporter implements CommandLineRunner {
 
         if (itemRepo.count() == 0) {
             System.out.println("🔄 Importando itens do rAthena...");
-            String yaml = downloadYaml(ITEM_DB_URL);
-            List<ItemEntity> items = itemParser.parse(yaml);
-            itemRepo.saveAll(items);
-            System.out.println("✅ " + items.size() + " itens importados.");
+
+            List<ItemEntity> todos = new ArrayList<>();
+            todos.addAll(parsearArquivo("Consumíveis", ITEM_DB_USABLE));
+            todos.addAll(parsearArquivo("Equipamentos", ITEM_DB_EQUIP));
+            todos.addAll(parsearArquivo("Etc",          ITEM_DB_ETC));
+
+            itemRepo.saveAll(todos);
+            System.out.println("✅ Total: " + todos.size() + " itens importados.");
         } else {
             System.out.println("📦 Itens já existem no banco. Pulando importação.");
         }
+    }
+
+    private List<ItemEntity> parsearArquivo(String nome, String url) {
+        System.out.println("  ↳ Baixando " + nome + "...");
+        String yaml = downloadYaml(url);
+        List<ItemEntity> itens = itemParser.parse(yaml);
+        System.out.println("  ↳ " + itens.size() + " itens de " + nome + " parseados.");
+        return itens;
     }
 
     private String downloadYaml(String url) {
