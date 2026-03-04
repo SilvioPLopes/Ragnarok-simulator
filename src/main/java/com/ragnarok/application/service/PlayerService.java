@@ -4,7 +4,7 @@ import com.ragnarok.domain.model.Player;
 import com.ragnarok.domain.model.PlayerLocation;
 import com.ragnarok.domain.model.PlayerStats;
 import org.springframework.transaction.annotation.Transactional;
-import com.ragnarok.infrastructure.client.mapper.PlayerMapper;
+import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import org.springframework.stereotype.Service;
@@ -34,7 +34,7 @@ public class PlayerService {
         novoPlayer.setZenny(0L);
 
         // Stats Iniciais
-        PlayerStats stats = new PlayerStats(1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0);
+        PlayerStats stats = new PlayerStats(1, 1, 1, 1, 1, 1, 100, 40);
         novoPlayer.setStats(stats);
 
         // Localização Inicial

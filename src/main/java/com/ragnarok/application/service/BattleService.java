@@ -6,7 +6,7 @@ import com.ragnarok.domain.model.Player;
 import com.ragnarok.domain.service.BattleEngine;
 import com.ragnarok.domain.service.LevelingService;
 import com.ragnarok.infrastructure.client.mapper.MonsterMapper;
-import com.ragnarok.infrastructure.client.mapper.PlayerMapper;
+import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import com.ragnarok.infrastructure.client.mapper.ItemMapper;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.infrastructure.persistence.MonsterEntity;
@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.UUID;
 
 @Service
 public class BattleService {

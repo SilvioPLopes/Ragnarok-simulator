@@ -5,6 +5,7 @@ import com.ragnarok.application.service.ItemService;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.*;
+import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import lombok.*;
@@ -18,27 +19,28 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
     private final BattleService battleService;
     private final PlayerService playerService;
-    private final ItemService itemService; // Novo Serviço
+    private final ItemService itemService;
     private final PlayerRepository playerRepo;
-    private final PlayerItemRepository playerItemRepo; // Novo Repositório (para listar)
+    private final PlayerItemRepository playerItemRepo;
     private final MonsterSpawnRepository spawnRepo;
     private final MonsterRepository monsterRepo;
+    private final PlayerMapper playerMapper;
 
     private final Scanner scanner = new Scanner(System.in);
     private final Random rng = new Random();
 
-    // Estado do Jogo
     private Player currentPlayer;
     private MonsterEntity currentMonster;
     private boolean inBattle = false;
 
     public RagnarokTerminalRunner(BattleService bs,
                                   PlayerService ps,
-                                  ItemService is, // Injetando
+                                  ItemService is,
                                   PlayerRepository pr,
-                                  PlayerItemRepository pir, // Injetando
+                                  PlayerItemRepository pir,
                                   MonsterSpawnRepository msr,
-                                  MonsterRepository mr) {
+                                  MonsterRepository mr,
+                                  PlayerMapper pm) {
         this.battleService = bs;
         this.playerService = ps;
         this.itemService = is;
@@ -46,6 +48,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         this.playerItemRepo = pir;
         this.spawnRepo = msr;
         this.monsterRepo = mr;
+        this.playerMapper = pm;
     }
 
     @Override
@@ -95,52 +98,19 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         if ("1".equals(input)) caminhar();
         else if ("2".equals(input)) System.exit(0);
         else if ("3".equals(input)) renderInventoryMenu();
-        else if ("4".equals(input)) renderStatusMenu(); // Chamada
+        else if ("4".equals(input)) renderStatusMenu();
     }
 
     private void renderStatusMenu() {
         PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
-
-        Player domainPlayer = new Player();
-
-        // --- CORREÇÃO: USANDO SETTERS EXPLICITOS ---
-        // Ignoramos o construtor para garantir que os dados entrem certos
-        com.ragnarok.domain.model.PlayerStats stats = new com.ragnarok.domain.model.PlayerStats();
-        stats.setStr(p.getStr());
-        stats.setAgi(p.getAgi());
-        stats.setVit(p.getVit());
-        stats.setIntVal(p.getIntelligence()); // Atenção: Entity é 'Intelligence', Domain é 'IntVal'
-        stats.setDex(p.getDex());
-        stats.setLuk(p.getLuk());
-
-        stats.setHp(p.getHpCurrent());
-        stats.setMaxHp(p.getHpMax());
-
-        domainPlayer.setStats(stats);
-
-        // Preenche inventário do domínio para o cálculo funcionar
-        List<PlayerItemEntity> itensEntity = playerItemRepo.findByPlayerId(p.getId());
-        // Conversão simplificada apenas para o cálculo
-        List<com.ragnarok.domain.model.PlayerItem> itensDomain = itensEntity.stream()
-                .map(e -> {
-                    com.ragnarok.domain.model.PlayerItem pi = new com.ragnarok.domain.model.PlayerItem();
-                    pi.setIsEquipped(e.getEquipped()); // Importante para a soma
-
-                    com.ragnarok.domain.model.Item itemDef = new com.ragnarok.domain.model.Item();
-                    itemDef.setStats(e.getItem().getStats()); // Usa o Virtual Getter que criamos
-                    pi.setItemDefinition(itemDef);
-
-                    return pi;
-                }).toList();
-
-        domainPlayer.setInventory(itensDomain);
+        Player domainPlayer = playerMapper.toDomain(p);
 
         System.out.println("\n=== STATUS DO PERSONAGEM ===");
         System.out.println("Nome: " + p.getName() + " | Classe: " + p.getJobClass());
         System.out.println("----------------------------");
         // Mostra (Base + Bônus)
         System.out.printf("STR: %d (+%d) -> Total: %d%n", p.getStr(), domainPlayer.getTotalStr() - p.getStr(), domainPlayer.getTotalStr());
-        System.out.printf("AGI: %d (+%d) -> Total: %d%n", p.getAgi(), 0, p.getAgi()); // Implementar getTotalAgi depois
+        System.out.printf("AGI: %d (+%d) -> Total: %d%n", p.getAgi(), 0, p.getAgi());
         System.out.printf("VIT: %d (+%d) -> Total: %d%n", p.getVit(), domainPlayer.getTotalVit() - p.getVit(), domainPlayer.getTotalVit());
         System.out.printf("INT: %d (+%d) -> Total: %d%n", p.getIntelligence(), domainPlayer.getTotalInt() - p.getIntelligence(), domainPlayer.getTotalInt());
         System.out.printf("DEX: %d%n", p.getDex());
@@ -260,8 +230,11 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         currentMonster = monsterRepo.findById(monsterId)
                 .orElseThrow(() -> new IllegalStateException("Monstro spawnado não existe no banco ID: " + monsterId));
 
-        currentMonster.setHp(getBaseHp(currentMonster.getId()));
-        monsterRepo.save(currentMonster);
+        if (currentMonster.getHp() == null || currentMonster.getHp() <= 0) {
+            System.err.println("AVISO: Monstro " + currentMonster.getName() + " sem HP definido. Usando 100 como fallback.");
+            currentMonster.setHp(100);
+            monsterRepo.save(currentMonster);
+        }
 
         inBattle = true;
         System.out.println("!!! UM MONSTRO APARECEU: " + currentMonster.getName() + " !!!");

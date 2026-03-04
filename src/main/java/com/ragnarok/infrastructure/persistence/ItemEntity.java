@@ -30,13 +30,11 @@ public class ItemEntity {
 
     @Column(name = "img_url")
     private String imgUrl;
-
-    // --- FLATTENING (Stats direto na tabela) ---
     private Integer attack;
     private Integer defense;
     private Integer magicAttack;
 
-    private Integer efeito; // O valor da cura ou buff
+    private Integer efeito;
     private Integer bonusStr;
     private Integer bonusAgi;
     private Integer bonusVit;
@@ -44,9 +42,8 @@ public class ItemEntity {
     private Integer bonusDex;
     private Integer bonusLuk;
 
-    @Column(name = "range_val") // 'range' é palavra reservada em alguns SQLs
+    @Column(name = "range_val")
     private Integer range;
-    private Integer stats; // tentei adicionar isso para resolver o erro do isStats mas acho que não é isso
     private Integer slots;
 
     @Column(name = "level_min")

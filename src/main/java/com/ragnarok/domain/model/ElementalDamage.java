@@ -3,7 +3,6 @@ package com.ragnarok.domain.model;
 import jakarta.persistence.*;
 import lombok.*;
 
-@Embeddable
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 public class ElementalDamage {
     private Integer neutral;

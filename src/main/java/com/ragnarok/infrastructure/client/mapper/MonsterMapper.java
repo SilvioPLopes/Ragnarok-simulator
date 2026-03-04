@@ -45,6 +45,11 @@ public class MonsterMapper {
         monster.setAttributes(mapAttributes(dto.main_atb()));
         monster.setElementalDamage(mapElementalDamage(dto.elementalDamage()));
 
+        if (dto.main_stats() != null) {
+            monster.setBaseExp(parseStat(dto.main_stats().base_exp()));
+            monster.setJobExp(parseStat(dto.main_stats().job_exp()));
+        }
+
         return monster;
     }
 
@@ -63,6 +68,9 @@ public class MonsterMapper {
         stats.setDef(entity.getDef() != null ? entity.getDef() : 0);
         stats.setM_def(entity.getMDef() != null ? entity.getMDef() : 0);
         monster.setStats(stats);
+
+        monster.setBaseExp(entity.getBaseExp() != null ? entity.getBaseExp() : 0);
+        monster.setJobExp(entity.getJobExp() != null ? entity.getJobExp() : 0);
 
         // Mapeamento de Drops (Com a correção)
         if (entity.getDrops() != null) {

@@ -43,7 +43,7 @@ public class MonsterEntity {
     private Integer defenseRating;
     private Integer critShield;
     private Integer expRatio;
-
+    private Integer str;
     private Integer agi;
     private Integer intelligence;
     private Integer luk;
