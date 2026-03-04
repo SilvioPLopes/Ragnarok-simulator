@@ -6,6 +6,7 @@ import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
+import jakarta.transaction.Transactional;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import lombok.*;
@@ -101,6 +102,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         else if ("4".equals(input)) renderStatusMenu();
     }
 
+    @Transactional
     private void renderStatusMenu() {
         PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
         Player domainPlayer = playerMapper.toDomain(p);
