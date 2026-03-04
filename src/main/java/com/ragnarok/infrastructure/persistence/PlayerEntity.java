@@ -71,7 +71,7 @@ public class PlayerEntity {
 
     // --- Relacionamento com Inventário ---
 
-    @OneToMany(mappedBy = "player", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "player", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private java.util.List<PlayerItemEntity> inventory = new java.util.ArrayList<>();
 
     // Método Helper para adicionar itens garantindo a consistência dos dois lados
