@@ -1,16 +1,17 @@
-
-```markdown
 # Ragnarok Core - Hexagonal Architecture Refactoring
 
-Este projeto é o núcleo (Core) de um sistema de emulação e gerenciamento de dados baseado no jogo Ragnarok Online. O projeto está passando por uma refatoração profunda para **Arquitetura Hexagonal (Ports and Adapters)**, visando desacoplar as regras de negócio (Domínio) de frameworks externos, banco de dados e APIs.
+Este projeto é o núcleo (Core) de um sistema de emulação e gerenciamento de dados baseado no jogo Ragnarok Online. O projeto está passando por uma refatoração profunda para **Arquitetura Hexagonal (Ports and Adapters)**, visando desacoplar as regras de negócio (Domínio) de frameworks externos, banco de dados e APIs. Toda a base de dados do jogo (monstros, itens, mapas, warps, drops) é importada diretamente do servidor oficial **rAthena** (`db/re/` — versão Renewal).
 
 ---
 
 ## ✅ Status do Projeto (Fase 1 & 2 em Andamento)
 - **Arquitetura:** Hexagonal (Domain, Application, Infrastructure).
-- **Engine de Batalha:** Cálculo de dano físico (Status + Equipamentos + Defesa) e Lógica de Turnos.
-- **Sistema de Loot:** Drop de itens baseado em chance (RNG) persistido no inventário.
+- **Dados do jogo:** Importados do rAthena `db/re/` — 2675 monstros, todos os itens, 1864 warps, 2374 spawns, 12544 drops.
+- **Navegação:** Player se move entre mapas reais usando portais do rAthena.
+- **Engine de Batalha:** Cálculo de dano físico (Status + Equipamentos + Defesa), counter-ataque do monstro e Lógica de Turnos.
+- **Sistema de Loot:** Drop de itens baseado em taxas reais do rAthena (RNG 1-10000) persistido no inventário.
 - **Sistema de Nível:** Gestão de Experiência (Base/Job), Level Up automático e pontos de atributos.
+- **ETL Pipeline:** Scripts Python em `scriptsPython/` para importar dados do rAthena para o banco.
 - **Testes:** Testes de integração cobrindo o ciclo "Atacar -> Matar -> Dropar -> Upar".
 
 ---
@@ -38,7 +39,12 @@ O projeto segue estritamente a separação de responsabilidades definida pela ar
 * **Persistence:** Comunicação com Banco de Dados (PostgreSQL). Usa Entities com anotações JPA (`@Entity`).
 * **Mapper:** A ponte tradutora que converte DTO (Infra) -> Domain -> Entity (Infra).
 
-### 4. "Battle System" (Ciclo de Batalha e Recompensa)
+### 4. Runner (`com.ragnarok.runner`)
+* `RagnarokTerminalRunner` — UI do terminal, game loop de exploração e combate.
+* `RathenaImporter` — importa monstros e itens do rAthena automaticamente no startup (`@Order(1)`).
+* `MockMapLoader` — cria o player inicial e popula dados básicos (`@Order(2)`).
+
+### 5. "Battle System" (Ciclo de Batalha e Recompensa)
 1. **Trigger:** `BattleService.realizarAtaque` é chamado.
 2. **Engine (Domínio):** `BattleEngine` calcula o dano físico e `LevelingService` processa a XP.
 3. **Aplicação:** Atualiza o HP do monstro e os dados do Player no banco.
@@ -46,54 +52,131 @@ O projeto segue estritamente a separação de responsabilidades definida pela ar
 
 ---
 
+## 🗺 Sistema de Navegação
+
+O player navega pelo mundo usando dados reais de warps do rAthena.
+
+- **`map_portals`** — 1864 warps extraídos de `npc/re/warps/`
+- **`map_monsters`** — 2374 entradas de spawn extraídas de `npc/re/mobs/`
+- **Localização do player** — salva em `PlayerEntity.mapName` (ex: `"prontera"`, `"prt_fild08"`)
+- **Encontro aleatório** — monstro sorteado por peso proporcional ao `amount` do spawn
+
+```
+Exemplo prt_fild08: Poring x87, Fabre x77, Lunatic x67...
+Poring aparece com probabilidade proporcional ao seu amount.
+```
+
+---
+
+## 🗄 Banco de Dados
+
+**URL:** `jdbc:postgresql://localhost:5432/ragnarok_db`
+**User:** `postgres` / **Password:** `postgre`
+
+| Tabela | Origem | Descrição |
+|---|---|---|
+| `monsters` | RathenaImporter (startup) | 2675 monstros do `db/re/mob_db.yml` |
+| `items` | RathenaImporter (startup) | Itens do `db/re/item_db_*.yml` |
+| `maps` | `maps.sql` | Todos os mapas do `db/map_index.txt` |
+| `map_portals` | `map_portals_v2.sql` | 1864 warps de `npc/re/warps/` |
+| `map_monsters` | `map_monsters.sql` | 2374 spawns de `npc/re/mobs/` |
+| `monster_drops` | `monster_drops.sql` | 12544 drops com rate real do rAthena |
+| `players` | MockMapLoader (startup) | Jogador inicial |
+| `player_items` | Gerado em combate | Inventário do jogador |
+| `monster_spawns` | MockMapLoader (startup) | Legado — substituído por `map_monsters` |
+
+### Rodando migrações
+
+```bash
+cd scriptsPython
+pip install psycopg2-binary --break-system-packages
+python3 Migrate.py
+```
+
+> ⚠️ Sempre usar `map_portals_v2.sql` — nunca o `map_portals.sql` original (incompleto).
+
+### Reset completo do banco (respeitar ordem de FK)
+
+```sql
+DELETE FROM monster_drops;
+DELETE FROM map_monsters;
+DELETE FROM monster_spawns;
+DELETE FROM monsters;
+DELETE FROM items;
+```
+
+---
+
+## 🐍 Scripts Python (`scriptsPython/`)
+
+Pipeline ETL que extrai dados do rAthena e gera SQLs para o banco.
+
+| Script | Função |
+|---|---|
+| `Migrate.py` | Roda todos os SQLs no banco em ordem |
+| `map_parser.py` | Gera `maps.sql` do `db/map_index.txt` |
+| `warp_parser.py` | Gera `map_portals_v2.sql` de `npc/re/warps/` |
+| `mob_parser.py` | Gera `map_monsters.sql` de `npc/re/mobs/` |
+| `drop_parser.py` | Gera `monster_drops.sql` de `db/re/mob_db.yml` |
+
+**Dependências Python:**
+```bash
+pip install requests pyyaml psycopg2-binary --break-system-packages
+```
+
+---
+
 ## 📂 Estrutura de Pastas Atual
 
 ```text
 com.ragnarok
-├── com.ragnarok
 ├── application
 │   └── service
 │       ├── MonsterCatalogService.java
 │       ├── PlayerService.java
-│       └── ItemService.java            # Novo: Gestão de Itens
+│       ├── ItemService.java            # Gestão de Itens
 │       └── BattleService.java
 │
 ├── domain
 │   └── model
 │   │   ├── Monster.java
 │   │   ├── Player.java
-│   │   ├── Item.java                   # Novo: Modelo Puro de Item
-│   │   ├── ItemStats.java              # Novo: Value Object
+│   │   ├── Item.java                   # Modelo Puro de Item
+│   │   ├── ItemStats.java              # Value Object
 │   │   ├── MonsterDrop.java
 │   │   └── ...
 │   └── service
-│       └── BattleEngine.java
-│       └── LevelingService.java        # Novo: Matemática de XP e Nível
+│       ├── BattleEngine.java
+│       └── LevelingService.java        # Matemática de XP e Nível
 │
 └── infrastructure
     ├── client
     │   ├── RagnapiClient.java
     │   ├── dto
     │   │   ├── MonsterDTO.java
-    │   │   └── ItemDTO.java            # Novo: DTO para API externa
+    │   │   └── ItemDTO.java            # DTO para API externa
     │   └── mapper
     │       ├── MonsterMapper.java      # Conversor de API (DTO -> Domain)
-    │       └── ItemMapper.java         # Conversor Híbrido (DTO <-> Domain <-> Entity)
+    │       ├── ItemMapper.java         # Conversor Híbrido (DTO <-> Domain <-> Entity)
     │       └── PlayerMapper.java
     │
     └── persistence
         ├── MonsterEntity.java
         ├── MonsterRepository.java
-        ├── MonsterSpawnEntity.java     # Novo: Tabela de ligação (Quem nasce Onde)
+        ├── MonsterSpawnEntity.java     # Legado — substituído por MapMonsterEntity
         ├── MonsterDropEntity.java
-        ├── GameMapEntity.java          # Novo: Tabela de Mapas (moc_fild08)
-        ├── GameMapRepository.java      # Novo: Repositório de Mapas
+        ├── GameMapEntity.java          # Tabela de Mapas (moc_fild08)
+        ├── GameMapRepository.java
+        ├── MapPortalEntity.java        # Portais reais do rAthena
+        ├── MapPortalRepository.java
+        ├── MapMonsterEntity.java       # Spawns por mapa com amount (peso)
+        ├── MapMonsterRepository.java
         ├── PlayerEntity.java
         ├── PlayerRepository.java
         ├── PlayerItemEntity.java
-        ├── PlayerMapper.java           # Correto: Mapper de Banco junto com Persistência
-        ├── ItemEntity.java             # Novo: Tabela 'items'
-        └── ItemRepository.java         # Novo: Repositório de Itens
+        ├── PlayerMapper.java           # Mapper de Banco junto com Persistência
+        ├── ItemEntity.java             # Tabela 'items'
+        └── ItemRepository.java
 ```
 
 ---
@@ -129,7 +212,7 @@ Fluxo resiliente que carrega dados externos, sanitiza inconsistências e realiza
     * Verifica se há item já equipado neste slot.
     * Remove o antigo e equipa o novo em uma única transação atômica.
 3. **Persistência de Loot:**
-    * Tabela associativa `monster_drops` armazena a taxa de drop (`rate`).
+    * Tabela associativa `monster_drops` armazena a taxa de drop (`rate` 1-10000, onde 10000 = 100%).
     * Arquitetura suporta *Eager Loading* para disponibilizar a tabela de loot imediatamente ao iniciar o combate.
 
 ### 4. "Battle & Progression" (Engine & Leveling)
@@ -137,8 +220,9 @@ Fluxo completo de combate, recompensa e evolução de personagem.
 
 1. **Trigger:** `BattleService.realizarAtaque(playerId, monsterId)`.
 2. **Combate (Engine):** `BattleEngine` calcula dano físico (`(STR*2 + WeaponATK) - EnemyDEF`) e define o vencedor do turno.
-3. **Loot (RNG):** Se o monstro morre, a engine rola os dados de drop baseada nas taxas da entidade. Itens ganhos são salvos na tabela `player_items`.
-4. **Processamento de XP (LevelingService):**
+3. **Counter-ataque:** Monstro responde no mesmo turno; dano e HP atual do jogador exibidos no terminal.
+4. **Loot (RNG):** Se o monstro morre, a engine rola os dados de drop baseada nas taxas reais do rAthena. Itens ganhos são salvos na tabela `player_items`.
+5. **Processamento de XP (LevelingService):**
     * **Extração:** Captura `baseExp` e `jobExp` do monstro.
     * **Cálculo:** `LevelingService` verifica a curva de experiência (`Level * 100`).
     * **Level Up:** Se a XP exceder o necessário:
@@ -147,7 +231,14 @@ Fluxo completo de combate, recompensa e evolução de personagem.
         * Executa **Full Heal** (Recupera HP/SP máximos).
     * **Persistência:** Atualiza a entidade `PlayerEntity` com os novos saldos.
 
-### 5. "Safety & Resilience" (Null Safety)
+### 5. "World Navigation" (Map & Portals)
+1. **Trigger:** Jogador seleciona "Portais" no menu de exploração.
+2. **Consulta:** `MapPortalRepository.findDestinosByMapFrom(mapaAtual)` retorna destinos disponíveis.
+3. **Viagem:** `PlayerEntity.mapName` é atualizado e persistido no banco.
+4. **Encontro:** `MapMonsterRepository.findByMapId(mapaAtual)` retorna spawns do mapa. Sorteio ponderado pelo `amount`.
+5. **Morte:** Player revive em `prontera`, `mapName` resetado.
+
+### 6. "Safety & Resilience" (Null Safety)
 Camada de proteção contra inconsistências de dados legados ou falhas de banco.
 
 1. **Mapper Blindado:** `PlayerMapper` implementa *Safe Unboxing*.
@@ -155,9 +246,7 @@ Camada de proteção contra inconsistências de dados legados ou falhas de banco
     * Previne `NullPointerException` em tempo de execução durante cálculos matemáticos.
 2. **Sanitização no Boot:** O `MockMapLoader` verifica e corrige registros corrompidos (campos nulos) ao inicializar a aplicação.
 
-
 ---
-
 
 ## 📝 Dicionário de Classes Chaves
 
@@ -167,14 +256,14 @@ Camada de proteção contra inconsistências de dados legados ou falhas de banco
     * *Evolução:* Agora expõe `baseExp` e `jobExp` para o cálculo de recompensas.
     * Possui atributos aninhados (`MainStats`) e tipos fortes.
 * **Player:** Modelo rico do usuário.
-    * *Evolução:* Contém lógica de inventário e gestão de progresso (`statPoints`, `skillPoints`, `xp`).
+    * *Evolução:* Contém lógica de inventário e gestão de progresso (`statPoints`, `skillPoints`, `xp`), além de `mapName` para localização no mundo.
 * **Item:** Modelo puro representando itens e equipamentos. Possui `ItemStats` (Value Object).
 * **MonsterDrop:** Objeto de domínio que associa um `Item` a uma chance de drop (`Double rate`).
 
 ### Domain Services (Regras de Negócio Puras)
 
 * **BattleEngine:** Realiza cálculos matemáticos de dano físico e sorteio de loot (RNG). Não depende de banco de dados.
-* **LevelingService:** **[NOVO]** Responsável pela matemática de progressão.
+* **LevelingService:** Responsável pela matemática de progressão.
     * Define a curva de experiência (`Nível * 100`).
     * Processa o Level Up (Base e Job).
     * Gerencia recompensas (Cura total, pontos de atributo e skill).
@@ -188,13 +277,17 @@ Camada de proteção contra inconsistências de dados legados ou falhas de banco
 * **MonsterEntity:** Entidade JPA mapeada na tabela `monsters`.
     * *Estratégia:* **Flattening**. "Achata" objetos complexos em colunas simples (ex: `stats.hp` vira `hp`).
 * **PlayerEntity:** Entidade JPA mapeada na tabela `players`.
-    * *Novas Colunas:* `base_exp`, `job_exp`, `stat_points`, `skill_points`.
+    * *Colunas:* `base_exp`, `job_exp`, `stat_points`, `skill_points`, `map_name`.
     * Também utiliza Flattening para atributos de batalha e localização.
 * **GameMapEntity:** Tabela `maps`.
     * *Diferencial:* O ID é o nome técnico do mapa (ex: `moc_fild08`) para facilitar a leitura e unicidade.
-* **MonsterSpawnEntity:** Tabela `monster_spawns`.
-    * *Função:* Resolve o relacionamento Muitos-para-Muitos (Monstros <-> Mapas), controlando quantidade e respawn.
-* **MonsterDropEntity:** Tabela `monster_drops`. Tabela associativa que liga Monstros e Itens com uma taxa de chance.
+* **MapPortalEntity:** Tabela `map_portals`.
+    * *Função:* Armazena os 1864 warps reais do rAthena com coordenadas de origem e destino.
+* **MapMonsterEntity:** Tabela `map_monsters`.
+    * *Função:* Associa monstros a mapas com `amount` (peso de spawn). Substitui `MonsterSpawnEntity` para dados reais do rAthena.
+* **MonsterSpawnEntity:** Tabela `monster_spawns`. **Legado** — substituído por `MapMonsterEntity`.
+    * *Função original:* Resolve o relacionamento Muitos-para-Muitos (Monstros <-> Mapas), controlando quantidade e respawn.
+* **MonsterDropEntity:** Tabela `monster_drops`. Tabela associativa que liga Monstros e Itens com taxa de chance real do rAthena (1-10000).
 * **PlayerItemEntity:** Tabela `player_items`. Representa o inventário, contendo UUID próprio, referência ao Item, refino e flag `is_equipped`.
 
 ### Mappers (Camada de Tradução e Segurança)
@@ -202,7 +295,6 @@ Camada de proteção contra inconsistências de dados legados ou falhas de banco
 * **MonsterMapper:** Crítico para resiliência. Contém lógica de `try-catch` e sanitização de dados externos.
 * **PlayerMapper:** **[Blindado]** Focado em estruturar objetos complexos em tabela plana.
     * *Feature:* Implementa **Safe Unboxing**. Se o banco retornar `NULL` para campos numéricos críticos (XP, Pontos), o Mapper converte automaticamente para `0` antes de instanciar o Domínio, prevenindo `NullPointerException` na lógica de negócio.
-
 
 ---
 
@@ -218,7 +310,7 @@ O projeto mantém uma bateria de testes de integração focados nos fluxos crít
 ### 🟢 Gameplay & Mechanics
 * **BattleIntegrationTest:** Valida a matemática de dano físico (`(STR*2 + Weapon) - DEF`).
 * **BattleLootIntegrationTest:** Valida a tabela de drop (RNG) e o salvamento do item na mochila.
-* **LevelingIntegrationTest:** **[NOVO]** Valida a curva de experiência, o reset de XP excedente e a entrega de recompensas (Pontos e Full Heal).
+* **LevelingIntegrationTest:** Valida a curva de experiência, o reset de XP excedente e a entrega de recompensas (Pontos e Full Heal).
 * **PlayerInventoryTest:** Valida a lógica de `Equip`/`Unequip` e a troca automática de slots (Auto-Swap).
 
 ---
@@ -228,14 +320,33 @@ O projeto mantém uma bateria de testes de integração focados nos fluxos crít
 O foco atual é fechar o ciclo de progressão do jogador e aumentar a complexidade do combate.
 
 ### Prioridade Alta (Próxima Sprint)
-1.  **Menu de Distribuição (UI):** Criar interface no Terminal para o jogador gastar os `statPoints` acumulados.
-2.  **Sistema de Habilidades (Skills):**
+1. **Menu de Distribuição (UI):** Criar interface no Terminal para o jogador gastar os `statPoints` acumulados.
+2. **Sistema de Habilidades (Skills):**
     * Criar entidade `Skill` e `PlayerSkill`.
     * Implementar menu para gastar `skillPoints`.
     * Integrar skills na `BattleEngine` (Dano Mágico/Físico Especial).
-3.  **Refatoração Elementar:** Atualizar a Engine para considerar os elementos (Fogo x Água) e tamanhos (Pequeno/Médio/Grande) no cálculo de dano.
+3. **Refatoração Elementar:** Atualizar a Engine para considerar os elementos (Fogo x Água) e tamanhos (Pequeno/Médio/Grande) no cálculo de dano.
 
 ### Futuro
 * **Persistência de Estado do Mapa:** Salvar a posição (X,Y) do jogador ao sair.
 * **Sistema de Lojas (NPCs):** Compra e venda de itens com Zenny.
+* **Conexões de borda entre mapas:** Campos conectados por borda (sem NPC warp) ainda não estão no `map_portals`.
 * **Multiplayer (WebSockets):** (Longo Prazo) Permitir interação entre jogadores.
+
+---
+
+## ⚙️ Build & Run
+
+```bash
+# Build
+./mvnw clean install
+
+# Rodar aplicação
+./mvnw spring-boot:run
+
+# Rodar todos os testes
+./mvnw test
+
+# Rodar teste específico
+./mvnw test -Dtest=BattleIntegrationTest
+```

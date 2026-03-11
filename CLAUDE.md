@@ -2,16 +2,16 @@
 
 ## Project Overview
 
-Ragnarok Online emulator/simulator built with **Hexagonal Architecture (Ports and Adapters)**. Java 17, Spring Boot 3.4.2, PostgreSQL, Flyway migrations.
+Ragnarok Online emulator/simulator built with **Hexagonal Architecture (Ports and Adapters)**. Java 17, Spring Boot 3.4.2, PostgreSQL. All game data is sourced from the official **rAthena** server emulator repository (`db/re/` branch — Renewal).
 
 ## Tech Stack
 
 - **Language:** Java 17
 - **Framework:** Spring Boot 3.4.2
 - **Database:** PostgreSQL (`ragnarok_db` on localhost:5432)
-- **Migrations:** Flyway (`src/main/resources/db/migration`)
 - **Build:** Maven (`./mvnw`)
 - **Dependencies:** Spring Data JPA, Spring Web, OpenFeign, Lombok, Jackson, SnakeYAML
+- **Python Scripts:** Data ETL pipeline in `scriptsPython/` (requires `requests`, `pyyaml`, `psycopg2-binary`)
 
 ## Architecture (Hexagonal)
 
@@ -31,75 +31,146 @@ com.ragnarok
 
 **Golden Rule:** The `domain` package must never depend on Spring, JPA, or any infrastructure framework.
 
-## Key Architectural Decisions
-
-- **Flattening strategy:** Complex domain objects (e.g., `PlayerStats`, `PlayerLocation`) are stored as flat columns in DB entities — no nested `@Embeddable` unless already established.
-- **Safe Unboxing:** `PlayerMapper` converts DB `NULL` numerics to `0` before passing to domain to prevent `NullPointerException`.
-- **Resilient DTOs:** `MonsterDTO` uses `String` fields to tolerate malformed external API data; parsing/sanitization happens in mappers.
-- **UUID inventory:** `PlayerItemEntity` uses UUID primary key allowing multiple instances of same item with different refinements.
-- **Auto-Swap equipment:** When equipping an item, `ItemService` auto-unequips whatever occupies the same `EquipSlot`.
-
 ## Database
 
 - **URL:** `jdbc:postgresql://localhost:5432/ragnarok_db`
 - **User:** `postgres` / **Password:** `postgre`
-- **Schema managed by Flyway** — DDL changes go in `src/main/resources/db/migration/`
-- `spring.jpa.hibernate.ddl-auto=update` is set but Flyway handles migrations
+- **ddl-auto:** `update`
 
-## Build & Run Commands
+### Tables
+
+| Tabela | Origem dos dados | Descrição |
+|---|---|---|
+| `monsters` | RathenaImporter (startup) | 2675 monstros do `db/re/mob_db.yml` |
+| `items` | RathenaImporter (startup) | Itens do `db/re/item_db_*.yml` |
+| `maps` | `maps.sql` | Todos os mapas do `db/map_index.txt` |
+| `map_portals` | `map_portals_v2.sql` | 1864 warps de `npc/re/warps/` |
+| `map_monsters` | `map_monsters.sql` | 2374 spawns de `npc/re/mobs/` com amount |
+| `monster_drops` | `monster_drops.sql` | 12544 drops de `db/re/mob_db.yml` com rate 1-10000 |
+| `players` | MockMapLoader (startup) | Jogador ID=1 "Hero" |
+| `player_items` | Gerado em combate | Inventário do jogador |
+| `monster_spawns` | MockMapLoader (startup) | Legado — substituído por `map_monsters` |
+
+### Rodando migrações SQL
 
 ```bash
-# Build
-./mvnw clean install
-
-# Run application
-./mvnw spring-boot:run
-
-# Run tests
-./mvnw test
-
-# Run specific test
-./mvnw test -Dtest=BattleIntegrationTest
+cd scriptsPython
+python3 Migrate.py
 ```
 
-## Domain Models Reference
+Ordem das migrações no `Migrate.py`:
+1. `maps.sql`
+2. `map_portals_v2.sql` ← usar sempre o v2, nunca o `map_portals.sql`
+3. `map_monsters.sql`
+4. `monster_drops.sql`
 
-| Class | Description |
+Se precisar resetar o banco, deletar na ordem correta (respeitar FKs):
+```sql
+DELETE FROM monster_drops;
+DELETE FROM map_monsters;
+DELETE FROM monster_spawns;
+DELETE FROM monsters;
+DELETE FROM items;
+```
+
+## Key Architectural Decisions
+
+- **Flattening strategy:** Complex domain objects stored as flat columns — no nested `@Embeddable`.
+- **Safe Unboxing:** `PlayerMapper` converts DB `NULL` numerics to `0` before domain.
+- **Resilient DTOs:** `MonsterDTO` uses `String` fields; parsing happens in mappers.
+- **UUID inventory:** `PlayerItemEntity` uses UUID primary key.
+- **Auto-Swap equipment:** `ItemService` auto-unequips same `EquipSlot` on equip.
+- **Re-only data:** ALL rAthena data uses `db/re/` — never mix with `pre-re/`.
+
+## Navigation System (World Map)
+
+The player navigates the world using real rAthena warp data.
+
+**Key classes:**
+- `MapPortalEntity` / `MapPortalRepository` — maps `map_portals` table
+  - `findDestinosByMapFrom(String mapFrom)` — returns distinct destinations
+  - `findFirstByMapFromAndMapTo(String from, String to)` — portal coordinates
+- `MapMonsterEntity` / `MapMonsterRepository` — maps `map_monsters` table
+  - `findByMapId(String mapId)` — returns monsters with JOIN FETCH
+
+**Player location:** Stored in `PlayerEntity.mapName` (e.g., `"prontera"`, `"prt_fild08"`). Updated on every map change and on death (resets to `"prontera"`).
+
+**Weighted random encounter:** Monster is selected by weighted RNG using `MapMonsterEntity.amount` as weight. Higher amount = higher spawn probability.
+
+```java
+// Example: prt_fild08 has Poring x87, Lunatic x67, Fabre x77
+// Poring appears ~37% of the time proportionally
+int totalPeso = entradas.stream().mapToInt(e -> e.getAmount()).sum();
+int sorteio = rng.nextInt(totalPeso);
+```
+
+## Terminal UI (RagnarokTerminalRunner)
+
+Main game loop with two states: exploration and battle.
+
+**Exploration menu:**
+1. Caçar monstros — weighted random encounter based on current map
+2. Portais — lists real warp destinations from `map_portals`
+3. Inventário
+4. Ver Status
+5. Sair
+
+**Battle menu:**
+- Shows player HP and monster HP each turn
+- Attack calls `BattleService.realizarAtaque`
+- On death: player revives at `prontera`
+
+**Important:** `MonsterSpawnRepository` is no longer used in `RagnarokTerminalRunner`. Use `MapMonsterRepository` instead.
+
+## Data Importers (Startup)
+
+`RathenaImporter` runs at `@Order(1)` on startup:
+- Downloads and parses `db/re/mob_db.yml` → saves to `monsters` (skips if count > 0)
+- Downloads and parses `db/re/item_db_*.yml` → saves to `items` (skips if count > 0)
+
+`MockMapLoader` runs at `@Order(2)` on startup:
+- Creates player ID=1 "Hero" if not exists
+- Creates map `prt_fild08` and spawns Poring/Pupa if not exists
+- Sets `player.mapName = "prontera"` on creation
+
+**SnakeYAML limit:** Both `MobDbParser` and `ItemDbParser` set `CodePointLimit` to 50MB to handle large rAthena YAML files:
+```java
+LoaderOptions options = new LoaderOptions();
+options.setCodePointLimit(50 * 1024 * 1024);
+```
+
+## Python ETL Scripts (`scriptsPython/`)
+
+| Script | Função |
 |---|---|
-| `Monster` | Enemy with `MainStats`, `drops`, `baseExp`, `jobExp` |
-| `Player` | Character with `PlayerStats`, `PlayerLocation`, inventory, XP/Level |
-| `Item` | Equipment/consumable with `ItemStats` value object |
-| `MonsterDrop` | Association of `Item` + drop rate (`Double`) |
-| `PlayerItem` | Inventory entry with UUID, refine level, `is_equipped` |
-| `BattleResult` | Result of a combat turn |
-| `ElementalDamage` | Elemental typing for damage calculation |
+| `Migrate.py` | Roda todos os SQLs no banco em ordem |
+| `map_parser.py` | Gera `maps.sql` do `db/map_index.txt` |
+| `warp_parser.py` | Gera `map_portals_v2.sql` de `npc/re/warps/` |
+| `mob_parser.py` | Gera `map_monsters.sql` de `npc/re/mobs/` |
+| `drop_parser.py` | Gera `monster_drops.sql` de `db/re/mob_db.yml` |
 
 ## Battle Mechanics
 
 - **Damage formula:** `(STR*2 + WeaponATK) - EnemyDEF`
+- **Monster counter-attack:** Calculated and displayed each turn
 - **XP curve:** `Level * 100`
 - **Level Up rewards:** +5 stat points, +1 skill point, full HP/SP heal
-- **Loot:** RNG drop roll based on `MonsterDropEntity.rate`
+- **Loot:** RNG drop roll based on `monster_drops.rate` (1-10000, where 10000 = 100%)
 
-## Testing
+## Build & Run
 
-Integration tests use a real PostgreSQL connection. Tests cover:
-- `MonsterCatalogServiceTest` — ETL flow: API -> sanitize -> persist -> spawn/drop mining
-- `PlayerServiceTest` — Character factory, initial stats, flattening
-- `BattleIntegrationTest` — Damage math
-- `BattleLootIntegrationTest` — Drop table RNG + inventory save
-- `LevelingIntegrationTest` — XP curve, reset, rewards
-- `PlayerInventoryIntegrationTest` — Equip/Unequip, Auto-Swap
-
-## Current Branch Strategy
-
-- `main` — stable branch
-- `Alt-01` — current active development branch
+```bash
+./mvnw clean install
+./mvnw spring-boot:run
+./mvnw test
+./mvnw test -Dtest=BattleIntegrationTest
+```
 
 ## Roadmap (Next Priorities)
 
-1. Stat distribution menu (Terminal UI for spending `statPoints`)
-2. Skills system (`Skill`, `PlayerSkill` entities, `skillPoints` spending)
-3. Elemental damage refactoring (element + size modifiers in `BattleEngine`)
-4. Map state persistence (save player X,Y position)
-5. NPC shop system (buy/sell with Zenny)
+1. **Stat distribution menu** — Terminal UI to spend `statPoints`
+2. **Skills system** — `Skill`, `PlayerSkill` entities, `skillPoints` spending
+3. **Elemental damage** — element + size modifiers in `BattleEngine`
+4. **Map state persistence** — save player X,Y position
+5. **NPC shop system** — buy/sell with Zenny
+6. **World border connections** — fields connected by border (not NPC warps) are not yet in `map_portals`
