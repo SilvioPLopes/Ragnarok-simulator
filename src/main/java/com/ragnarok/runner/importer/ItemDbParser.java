@@ -4,6 +4,7 @@ import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.infrastructure.persistence.ItemEntity;
 import org.springframework.stereotype.Component;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.util.Collections;
@@ -16,7 +17,9 @@ import java.util.stream.Collectors;
 public class ItemDbParser {
 
     public List<ItemEntity> parse(String yamlContent) {
-        Yaml yaml = new Yaml();
+        LoaderOptions options = new LoaderOptions();
+        options.setCodePointLimit(50 * 1024 * 1024); // 50MB
+        Yaml yaml = new Yaml(options);
         Map<String, Object> root = yaml.load(yamlContent);
 
         List<Map<String, Object>> body = (List<Map<String, Object>>) root.get("Body");

@@ -36,6 +36,7 @@ public class MockMapLoader {
                 p.setJobExp(0L);
                 p.setStatPoints(0);
                 p.setSkillPoints(0);
+                p.setMapName("prontera");
                 player = playerRepo.save(p);
             } else {
                 player = playerRepo.findById(1L).orElseThrow();
