@@ -8,6 +8,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,15 +17,15 @@ import java.util.List;
 public class RathenaImporter implements CommandLineRunner {
 
     private static final String MOB_DB_URL =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/mob_db.yml";
+            "https://raw.githubusercontent.com/rathena/rathena/master/db/re/mob_db.yml";
 
     // O item_db.yml principal não tem itens — ele importa 3 arquivos separados
     private static final String ITEM_DB_USABLE =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/item_db_usable.yml";
+            "https://raw.githubusercontent.com/rathena/rathena/master/db/re/item_db_usable.yml";
     private static final String ITEM_DB_EQUIP =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/item_db_equip.yml";
+            "https://raw.githubusercontent.com/rathena/rathena/master/db/re/item_db_equip.yml";
     private static final String ITEM_DB_ETC =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/pre-re/item_db_etc.yml";
+            "https://raw.githubusercontent.com/rathena/rathena/master/db/re/item_db_etc.yml";
 
     private final MonsterRepository monsterRepo;
     private final ItemRepository itemRepo;

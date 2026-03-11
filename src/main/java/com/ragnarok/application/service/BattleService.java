@@ -87,11 +87,8 @@ public class BattleService {
             return String.format("FATAL: Você causou %d de dano, mas o %s contra-atacou com %d e você morreu.", damage, monster.getName(), monsterDamage);
         }
 
-        return String.format("ATAQUE: Você causou %d de dano! O %s tem %d HP restante. (Arma: %s)",
-                damage,
-                monster.getName(),
-                newHp,
-                identificarArma(player));
+        return String.format("ATAQUE: Voce causou %d de dano no %s. (HP restante: %d)\n  >> %s contra-atacou e causou %d de dano em voce!",
+                damage, monster.getName(), newHp, monster.getName(), monsterDamage);
     }
 
     private String processarMorteMonstro(PlayerEntity playerEntity, Monster monsterDomain) {

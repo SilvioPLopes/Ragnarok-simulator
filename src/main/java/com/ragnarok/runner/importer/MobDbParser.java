@@ -2,6 +2,7 @@ package com.ragnarok.runner.importer;
 
 import com.ragnarok.infrastructure.persistence.MonsterEntity;
 import org.springframework.stereotype.Component;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.util.Collections;
@@ -14,7 +15,9 @@ import java.util.stream.Collectors;
 public class MobDbParser {
 
     public List<MonsterEntity> parse(String yamlContent) {
-        Yaml yaml = new Yaml();
+        LoaderOptions options = new LoaderOptions();
+        options.setCodePointLimit(50 * 1024 * 1024); // 50MB
+        Yaml yaml = new Yaml(options);
         Map<String, Object> root = yaml.load(yamlContent);
 
         List<Map<String, Object>> body = (List<Map<String, Object>>) root.get("Body");
@@ -40,7 +43,6 @@ public class MobDbParser {
             entity.setMDef(toInt(mob.get("MagicDefense")));
             entity.setLevel(toInt(mob.get("Level")));
 
-            // Atributos
             entity.setStr(toInt(mob.get("Str")));
             entity.setAgi(toInt(mob.get("Agi")));
             entity.setVit(toInt(mob.get("Vit")));
