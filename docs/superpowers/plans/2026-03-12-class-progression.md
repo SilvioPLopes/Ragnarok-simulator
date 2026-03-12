@@ -368,7 +368,7 @@ class ClassChangeServiceTest {
     }
 
     @Test
-    @DisplayName("KNIGHT (tier 2) retorna lista vazia")
+    @DisplayName("KNIGHT (tier 2) retorna lista vazia sem chamar o banco")
     void listar_tier2_retornaVazio() {
         PlayerEntity p = makePlayer("KNIGHT", 1, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
@@ -376,10 +376,12 @@ class ClassChangeServiceTest {
         List<JobClass> disponiveis = classChangeService.listarClassesDisponiveis(1L);
 
         assertTrue(disponiveis.isEmpty());
+        // Verifica que o guard impediu a chamada ao banco
+        verify(skillTreeRepository, never()).findDistinctJobClasses();
     }
 
     @Test
-    @DisplayName("SUPER_NOVICE retorna lista vazia")
+    @DisplayName("SUPER_NOVICE retorna lista vazia sem chamar o banco")
     void listar_superNovice_retornaVazio() {
         PlayerEntity p = makePlayer("SUPER_NOVICE", 1, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
@@ -387,6 +389,8 @@ class ClassChangeServiceTest {
         List<JobClass> disponiveis = classChangeService.listarClassesDisponiveis(1L);
 
         assertTrue(disponiveis.isEmpty());
+        // Verifica que o guard impediu a chamada ao banco
+        verify(skillTreeRepository, never()).findDistinctJobClasses();
     }
 
     @Test
@@ -406,7 +410,7 @@ class ClassChangeServiceTest {
 
     @Test
     @DisplayName("Novice com jobLevel 9 troca para SWORDSMAN com sucesso")
-    void trocar_novice_jobLevel9_paraSwrodsman() {
+    void trocar_novice_jobLevel9_paraSwordsman() {
         PlayerEntity p = makePlayer("NOVICE", 9, 3);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
 
@@ -869,6 +873,8 @@ private void renderNpcMenu() {
         currentClass = JobClass.valueOf(p.getJobClass());
     } catch (Exception e) {
         System.out.println("Erro ao identificar classe do jogador.");
+        System.out.println("(Pressione ENTER para voltar)");
+        scanner.nextLine();
         return;
     }
 
