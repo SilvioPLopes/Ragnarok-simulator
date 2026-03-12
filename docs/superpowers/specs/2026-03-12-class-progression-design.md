@@ -24,8 +24,8 @@ The `JobClass` enum was refactored (prior to this spec) to include:
 - `nextClasses()`: returns all `JobClass` entries whose `parentClass == this`
 
 **Special cases:**
-- `SUPER_NOVICE` and `SUMMONER` are tier 0 — they are starting classes, not evolutions.
-- Tier 1 classes have `parentClass = null` (any Novice can choose any Class 1 freely).
+- `SUPER_NOVICE` and `SUMMONER` are tier 0 — they are starting classes, not evolutions. They do NOT have a standard Class 1 progression path.
+- Tier 1 classes have `parentClass = null` (any `NOVICE` can choose any Class 1 freely).
 - `SUMMONER` has no `nextClasses()` — no class change path defined yet.
 
 ---
@@ -36,17 +36,33 @@ The `JobClass` enum was refactored (prior to this spec) to include:
 
 | Condition | Behavior |
 |---|---|
-| `baseLevel >= 99` | Stop awarding base level ups; discard excess base exp |
-| `jobLevel >= jobClass.maxJobLevel()` | Stop awarding job exp and job level ups |
+| `baseLevel >= 99` | Do NOT add base exp to `player.baseExp`; log `(base nível máximo atingido)` |
+| `jobLevel >= jobClass.maxJobLevel()` | Do NOT add job exp to `player.jobExp`; log `(job nível máximo atingido)` |
 
 ### Implementation
 
 **`LevelingService.processarExperiencia(Player, long, long)`:**
 
-- Before adding base exp: if `player.baseLevel >= 99`, skip base exp entirely.
-- The base `while` loop already handles overflow correctly — add a `baseLevel < 99` guard.
-- Before adding job exp: if `player.jobLevel >= maxJobLevel`, skip job exp. Log `(job nível máximo atingido)` instead of `(+X Job XP)`.
-- `maxJobLevel` is resolved by parsing `player.jobClass` (String) to `JobClass` enum via `JobClass.valueOf(player.getJobClass())`.
+**Base exp block:**
+- Before adding base exp: resolve `JobClass` from `player.getJobClass()` (see guard below).
+- If `player.getBaseLevel() >= 99`: do NOT add `gainedBaseExp` to `player.baseExp`. Log `(base nível máximo atingido)`. Skip the base level-up `while` entirely.
+- Otherwise: add exp and run the existing `while` loop (already handles overflow correctly). Add guard `player.getBaseLevel() < 99` to the `while` condition.
+
+**Job exp block:**
+- Resolve `maxJobLevel` from `JobClass`.
+- If `player.getJobLevel() >= maxJobLevel`: do NOT add `gainedJobExp` to `player.jobExp`. `player.jobExp` remains unchanged. Log `(job nível máximo atingido)`. Skip the job level-up `while` entirely.
+- Otherwise: add exp and run the existing `while` loop. Add guard `player.getJobLevel() < maxJobLevel` to the `while` condition to prevent overshooting.
+
+**Resolving `JobClass` from String (defensive guard):**
+```java
+JobClass jobClass;
+try {
+    jobClass = JobClass.valueOf(player.getJobClass());
+} catch (IllegalArgumentException | NullPointerException e) {
+    throw new IllegalStateException("JobClass inválida ou não definida: " + player.getJobClass());
+}
+```
+This guard is applied once at the start of `processarExperiencia`.
 
 **No new classes needed.** All changes are within `LevelingService`.
 
@@ -56,39 +72,45 @@ The `JobClass` enum was refactored (prior to this spec) to include:
 
 ### New class: `com.ragnarok.application.service.ClassChangeService`
 
-**Method:**
+**Methods:**
 ```java
+List<JobClass> listarClassesDisponiveis(Long playerId)
 void trocarClasse(Long playerId, JobClass novaClasse)
 ```
 
+`listarClassesDisponiveis` applies the same guard logic (step 3 below) and returns the filtered list of valid target `JobClass` values. Returns empty list if the player's class has no progression path. Used by `renderNpcMenu()` to display options without bypassing the service layer.
+
 **Validation steps (in order):**
-1. Load `PlayerEntity` by id — throw if not found.
-2. Parse current `jobClass` string to `JobClass` enum.
-3. Determine valid target classes:
-   - If current tier == 0 (Novice): valid targets = all tier-1 `JobClass` values present in `skill_tree`.
-   - If current tier == 1: valid targets = `currentJobClass.nextClasses()` filtered by presence in `skill_tree`.
-4. If `novaClasse` not in valid targets → throw `IllegalStateException("Classe inválida para progressão.")`.
-5. Check job level requirement:
-   - Tier 0 → Tier 1: `jobLevel >= 9`
-   - Tier 1 → Tier 2: `jobLevel >= 40`
-   - Else → throw `IllegalStateException("Job level insuficiente. Necessário: X")`.
-6. Apply transition:
+
+1. Load `PlayerEntity` by id — throw `IllegalStateException("Jogador não encontrado.")` if not found.
+2. Parse current `jobClass` string to `JobClass` enum using the same defensive guard as `LevelingService`. Throw `IllegalStateException` on invalid value.
+3. **Guard: only `NOVICE` (tier 0) and Tier 1 classes can change class.** If `currentJobClass.tier >= 2` OR (`currentJobClass.tier == 0` AND `currentJobClass != JobClass.NOVICE`): throw `IllegalStateException("Troca de classe não disponível para esta classe.")`. This blocks `SUPER_NOVICE` and `SUMMONER` from the standard progression path.
+4. Build the set of DB-valid class names: `Set<String> dbClasses` from `skillTreeRepository.findDistinctJobClasses()`, normalized to uppercase.
+5. Determine valid target classes:
+   - If `currentJobClass == JobClass.NOVICE`: valid targets = all `JobClass` values with `tier == 1` whose `name()` is in `dbClasses`.
+   - If `currentJobClass.tier == 1`: valid targets = `currentJobClass.nextClasses()` filtered by presence in `dbClasses`.
+6. If `novaClasse` not in valid targets → throw `IllegalStateException("Classe inválida para progressão.")`.
+7. Check job level requirement:
+   - `currentJobClass == JobClass.NOVICE` (tier 0 → tier 1): require `jobLevel >= 9`, else throw `IllegalStateException("Job level insuficiente. Necessário: 9")`.
+   - `currentJobClass.tier == 1` (tier 1 → tier 2): require `jobLevel >= 40`, else throw `IllegalStateException("Job level insuficiente. Necessário: 40")`.
+   - Any other combination: throw `IllegalStateException("Progressão de classe não suportada para este tier.")` (defensive guard, should not be reachable after step 3).
+8. Apply transition:
    - `playerEntity.setJobClass(novaClasse.name())`
    - `playerEntity.setJobLevel(1)`
    - `playerEntity.setJobExp(0L)`
    - `skillPoints` unchanged (accumulated points are kept)
-7. Save `PlayerEntity`.
+9. Save `PlayerEntity`.
 
 **Dependencies:** `PlayerRepository`, `SkillTreeRepository`.
 
 ### SkillTreeRepository — new query
 
 ```java
-@Query("SELECT DISTINCT s.jobClass FROM SkillTreeEntity s")
+@Query("SELECT DISTINCT UPPER(s.jobClass) FROM SkillTreeEntity s")
 List<String> findDistinctJobClasses();
 ```
 
-Used to filter which classes actually have skill data in the DB before presenting them to the player.
+Returns uppercased strings, safe for direct comparison with `JobClass.name()` (which is always uppercase). Used to filter which classes have skill data in the DB before presenting them to the player.
 
 ---
 
@@ -111,18 +133,15 @@ Option `6. Falar com NPC` is shown **only when `mapName.equals("prontera")`**.
 ### New method: `renderNpcMenu()`
 
 Flow:
-1. Load player, parse `jobClass`, get `tier`.
-2. If tier >= 2: print `"O NPC diz: Você já atingiu uma classe avançada."` and return.
-3. Build list of available classes:
-   - Tier 0: all tier-1 `JobClass` values whose name exists in `skillTreeRepo.findDistinctJobClasses()`.
-   - Tier 1: `currentJobClass.nextClasses()` filtered by `findDistinctJobClasses()`.
-4. If list is empty: print `"Nenhuma classe disponível no momento."` and return.
-5. Print job level requirement (9 or 40) and current job level.
-6. Display numbered list of available classes with `descricao`.
-7. Read player choice (0 = cancel).
-8. Call `classChangeService.trocarClasse(playerId, escolha)`.
-9. Catch `IllegalStateException` and display the message.
-10. On success: print `">>> Você se tornou um(a) [Classe.descricao]!"`.
+1. Call `classChangeService.listarClassesDisponiveis(playerId)` to get the valid target list.
+2. If list is empty: print `"O NPC diz: Troca de classe não disponível para sua classe atual."` and return to exploration menu.
+3. Load `PlayerEntity` to display current job level. Determine required job level: `9` if current class is `NOVICE`, `40` otherwise.
+4. Print required job level and current job level.
+5. Display numbered list of available classes with `descricao`.
+6. Read player choice (0 = cancel). Return to exploration menu on cancel.
+7. Call `classChangeService.trocarClasse(playerId, escolha)`.
+8. Catch `IllegalStateException` and display the message (stays in NPC menu for retry).
+9. On success: print `">>> Você se tornou um(a) [Classe.descricao]!"` and return to exploration menu.
 
 ---
 
@@ -134,29 +153,52 @@ Terminal input
     ▼
 RagnarokTerminalRunner.renderNpcMenu()
     │
-    ▼
-ClassChangeService.trocarClasse(playerId, novaClasse)
-    │  ├── PlayerRepository.findById()
-    │  ├── SkillTreeRepository.findDistinctJobClasses()
-    │  └── PlayerRepository.save()
+    ├── ClassChangeService.listarClassesDisponiveis(playerId)
+    │       ├── PlayerRepository.findById()
+    │       └── SkillTreeRepository.findDistinctJobClasses()  ← UPPER-cased strings
     │
-    ▼
-PlayerEntity updated (jobClass, jobLevel=1, jobExp=0)
+    └── ClassChangeService.trocarClasse(playerId, novaClasse)
+            ├── PlayerRepository.findById()
+            ├── SkillTreeRepository.findDistinctJobClasses()
+            └── PlayerRepository.save()
+                    │
+                    ▼
+        PlayerEntity updated (jobClass=novaClasse.name(), jobLevel=1, jobExp=0, skillPoints unchanged)
 ```
 
 ---
 
 ## Error Handling
 
-All validation errors throw `IllegalStateException` with a human-readable PT-BR message. The terminal catches them and prints the message, returning to the NPC menu.
+All validation errors throw `IllegalStateException` with a human-readable PT-BR message. The terminal catches them and prints the message without crashing the game loop.
 
 ---
 
 ## Testing
 
-- `LevelingServiceTest`: assert base exp stops at level 99; assert job exp stops at `maxJobLevel()`; assert job exp ignored when at cap.
-- `ClassChangeServiceTest` (unit): mock repos; test valid transition, invalid class, insufficient job level, tier >= 2 guard.
-- `ClassChangeIntegrationTest`: use real DB; test full Novice → Swordsman flow.
+**`LevelingServiceTest` (unit):**
+- Player at base level 99 receives exp: assert `player.baseExp` is NOT incremented, `baseLevel` stays 99.
+- Player below level 99 levels up normally to 99: assert stops at 99 even with large exp gain.
+- Player at `maxJobLevel()` receives job exp: assert `player.jobExp` is NOT incremented, `jobLevel` unchanged.
+- Player at job level cap-minus-1 receives enough exp to overshoot: assert caps at `maxJobLevel()`, no further level-up.
+- `player.jobClass` is null: assert `IllegalStateException` thrown.
+
+**`ClassChangeServiceTest` (unit, mocked repos):**
+- `listarClassesDisponiveis` for NOVICE returns only tier-1 classes present in mocked DB set.
+- `listarClassesDisponiveis` for KNIGHT (tier 2) returns empty list.
+- `listarClassesDisponiveis` for SUPER_NOVICE returns empty list.
+- Valid Novice → Swordsman with `jobLevel == 9`: assert transition applied, `jobLevel=1`, `jobExp=0`, `skillPoints` preserved.
+- Novice with `jobLevel == 8`: assert `IllegalStateException("Job level insuficiente. Necessário: 9")`.
+- Class 1 → Class 2 with `jobLevel == 40`: assert transition applied.
+- Class 1 → Class 2 with `jobLevel == 39`: assert `IllegalStateException`.
+- Player is `KNIGHT` (tier 2): assert `IllegalStateException("Troca de classe não disponível para esta classe.")`.
+- Player is `SUPER_NOVICE` (tier 0, not NOVICE): assert `IllegalStateException("Troca de classe não disponível para esta classe.")`.
+- Player is `SUMMONER` (tier 0, not NOVICE): assert `IllegalStateException`.
+- `novaClasse` not in valid targets: assert `IllegalStateException("Classe inválida para progressão.")`.
+- `playerEntity.jobClass` is null or invalid string: assert `IllegalStateException`.
+
+**`ClassChangeIntegrationTest` (Spring Boot test, real DB):**
+- Full Novice → Swordsman flow: assert `playerEntity.jobClass == "SWORDSMAN"`, `jobLevel == 1`, `jobExp == 0`, `skillPoints` unchanged in DB.
 
 ---
 
