@@ -2,11 +2,15 @@
 Ragnarok DB Migration Runner
 ==============================
 Roda todos os SQLs de migração em ordem no banco PostgreSQL.
+Seguro para reexecutar — todos os SQLs usam:
+  - CREATE TABLE IF NOT EXISTS
+  - ON CONFLICT DO UPDATE (upsert)
 
 Configuração via variáveis de ambiente ou edite as constantes abaixo.
 
 Uso:
-    python3 migrate.py
+    python3 Migrate.py
+    python3 Migrate.py --force    # ignora verificação de tabelas existentes
 
 Dependências:
     pip install psycopg2-binary --break-system-packages
@@ -14,6 +18,7 @@ Dependências:
 
 import psycopg2
 import os
+import sys
 
 # ── Configuração do banco ─────────────────────────────────────────────────────
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -23,16 +28,38 @@ DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASS", "postgre")
 
 # ── Ordem das migrações ───────────────────────────────────────────────────────
-# Coloque os arquivos na ordem correta respeitando dependências de FK
+# Respeita dependências de FK — não altere a ordem
 MIGRATIONS = [
-    "maps.sql",            # tabela maps (sem FK)
-    "map_portals_v2.sql",  # portais (sem FK com monsters)
-    "map_monsters.sql",    # spawns por mapa (FK: monsters)
-    "monster_drops.sql",   # drops (FK: monsters + items)
+    ("maps.sql",            "maps"),
+    ("map_portals_v2.sql",  "map_portals"),   # sempre usar v2, nunca map_portals.sql
+    ("map_monsters.sql",    "map_monsters"),
+    ("monster_drops.sql",   "monster_drops"),
+    ("skills.sql",          "skills"),
+    ("skill_tree.sql",      "skill_tree"),
 ]
 
-# ── Runner ────────────────────────────────────────────────────────────────────
+
+def tabela_existe(cur, tabela):
+    cur.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = %s
+        )
+    """, (tabela,))
+    return cur.fetchone()[0]
+
+
+def tabela_tem_dados(cur, tabela):
+    try:
+        cur.execute(f"SELECT COUNT(*) FROM {tabela}")
+        return cur.fetchone()[0] > 0
+    except Exception:
+        return False
+
+
 def main():
+    force = "--force" in sys.argv
+
     print("Ragnarok DB Migration Runner")
     print(f"Conectando em {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}\n")
 
@@ -49,11 +76,18 @@ def main():
 
     pasta = os.path.dirname(os.path.abspath(__file__))
 
-    for arquivo in MIGRATIONS:
+    for arquivo, tabela in MIGRATIONS:
         caminho = os.path.join(pasta, arquivo)
 
         if not os.path.exists(caminho):
             print(f"  AVISO: {arquivo} não encontrado, pulando.")
+            continue
+
+        # Proteção: se tabela existe e tem dados, pula (a menos que --force)
+        if not force and tabela_existe(cur, tabela) and tabela_tem_dados(cur, tabela):
+            cur.execute(f"SELECT COUNT(*) FROM {tabela}")
+            count = cur.fetchone()[0]
+            print(f"  PULANDO {arquivo} — tabela '{tabela}' já tem {count} registros. Use --force para sobrescrever.")
             continue
 
         print(f"Rodando {arquivo}...")
@@ -63,15 +97,21 @@ def main():
 
             cur.execute(sql)
             conn.commit()
-            print(f"  OK")
+
+            if tabela_existe(cur, tabela):
+                cur.execute(f"SELECT COUNT(*) FROM {tabela}")
+                count = cur.fetchone()[0]
+                print(f"  OK — {count} registros em '{tabela}'")
+            else:
+                print(f"  OK")
         except Exception as e:
             conn.rollback()
             print(f"  ERRO: {e}")
-            print(f"  Rollback feito. Continuando proxima migracao...")
+            print(f"  Rollback feito. Continuando próxima migração...")
 
     cur.close()
     conn.close()
-    print("\nMigracoes concluidas.")
+    print("\nMigrações concluídas.")
 
 
 if __name__ == "__main__":
