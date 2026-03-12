@@ -78,7 +78,7 @@ List<JobClass> listarClassesDisponiveis(Long playerId)
 void trocarClasse(Long playerId, JobClass novaClasse)
 ```
 
-`listarClassesDisponiveis` applies the same guard logic (step 3 below) and returns the filtered list of valid target `JobClass` values. Returns empty list if the player's class has no progression path. Used by `renderNpcMenu()` to display options without bypassing the service layer.
+`listarClassesDisponiveis` applies the same guard logic (step 3 below) and returns the filtered list of valid target `JobClass` values. Returns empty list if the player's class has no progression path. Used by `renderNpcMenu()` to display options without bypassing the service layer. **Job level requirements are NOT checked by this method; they are enforced exclusively by `trocarClasse`.**
 
 **Validation steps (in order):**
 
@@ -199,6 +199,7 @@ All validation errors throw `IllegalStateException` with a human-readable PT-BR 
 
 **`ClassChangeIntegrationTest` (Spring Boot test, real DB):**
 - Full Novice → Swordsman flow: assert `playerEntity.jobClass == "SWORDSMAN"`, `jobLevel == 1`, `jobExp == 0`, `skillPoints` unchanged in DB.
+- **Pre-condition:** the `skill_tree` table must have at least one row with `job_class = 'swordsman'` (or uppercase equivalent). Use `@Sql` to insert the row if the DB may be empty.
 
 ---
 
