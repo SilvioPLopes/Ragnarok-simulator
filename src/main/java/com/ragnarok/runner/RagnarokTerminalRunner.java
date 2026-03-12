@@ -132,24 +132,70 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     }
 
     private void renderStatusMenu() {
-        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
-        Player domainPlayer = playerMapper.toDomain(p);
+        while (true) {
+            PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+            Player domainPlayer = playerMapper.toDomain(p);
+            int pontos = p.getStatPoints() != null ? p.getStatPoints() : 0;
 
-        System.out.println("\n=== STATUS DO PERSONAGEM ===");
-        System.out.println("Nome: " + p.getName() + " | Classe: " + p.getJobClass());
-        System.out.println("Mapa: " + (p.getMapName() != null ? p.getMapName() : "prontera"));
-        System.out.println("----------------------------");
-        System.out.printf("STR: %d (+%d) = %d%n", p.getStr(), domainPlayer.getTotalStr() - p.getStr(), domainPlayer.getTotalStr());
-        System.out.printf("AGI: %d (+%d) = %d%n", p.getAgi(), domainPlayer.getTotalAgi() - p.getAgi(), domainPlayer.getTotalAgi());
-        System.out.printf("VIT: %d (+%d) = %d%n", p.getVit(), domainPlayer.getTotalVit() - p.getVit(), domainPlayer.getTotalVit());
-        System.out.printf("INT: %d (+%d) = %d%n", p.getIntelligence(), domainPlayer.getTotalInt() - p.getIntelligence(), domainPlayer.getTotalInt());
-        System.out.printf("DEX: %d (+%d) = %d%n", p.getDex(), domainPlayer.getTotalDex() - p.getDex(), domainPlayer.getTotalDex());
-        System.out.printf("LUK: %d (+%d) = %d%n", p.getLuk(), domainPlayer.getTotalLuk() - p.getLuk(), domainPlayer.getTotalLuk());
-        System.out.println("----------------------------");
-        System.out.printf("Base EXP: %d | Job EXP: %d%n", p.getBaseExp(), p.getJobExp());
-        System.out.printf("Stat Points: %d | Skill Points: %d%n", p.getStatPoints(), p.getSkillPoints());
-        System.out.println("Pressione ENTER para voltar...");
-        scanner.nextLine();
+            System.out.println("\n=== STATUS DO PERSONAGEM ===");
+            System.out.println("Nome: " + p.getName() + " | Classe: " + p.getJobClass());
+            System.out.println("Mapa: " + (p.getMapName() != null ? p.getMapName() : "prontera"));
+            System.out.println("----------------------------");
+            System.out.printf("1. STR: %d (+%d) = %d%n", p.getStr(), domainPlayer.getTotalStr() - p.getStr(), domainPlayer.getTotalStr());
+            System.out.printf("2. AGI: %d (+%d) = %d%n", p.getAgi(), domainPlayer.getTotalAgi() - p.getAgi(), domainPlayer.getTotalAgi());
+            System.out.printf("3. VIT: %d (+%d) = %d%n", p.getVit(), domainPlayer.getTotalVit() - p.getVit(), domainPlayer.getTotalVit());
+            System.out.printf("4. INT: %d (+%d) = %d%n", p.getIntelligence(), domainPlayer.getTotalInt() - p.getIntelligence(), domainPlayer.getTotalInt());
+            System.out.printf("5. DEX: %d (+%d) = %d%n", p.getDex(), domainPlayer.getTotalDex() - p.getDex(), domainPlayer.getTotalDex());
+            System.out.printf("6. LUK: %d (+%d) = %d%n", p.getLuk(), domainPlayer.getTotalLuk() - p.getLuk(), domainPlayer.getTotalLuk());
+            System.out.println("----------------------------");
+            System.out.printf("Base EXP: %d | Job EXP: %d%n", p.getBaseExp(), p.getJobExp());
+
+            if (pontos > 0) {
+                System.out.printf(">>> Pontos disponiveis: %d — Digite 1-6 para distribuir%n", pontos);
+            } else {
+                System.out.println("Stat Points: 0");
+            }
+
+            System.out.println("0. Voltar");
+            System.out.print("> ");
+
+            String input = scanner.nextLine().trim();
+
+            if ("0".equals(input) || input.isEmpty()) return;
+
+            if (pontos <= 0) {
+                System.out.println("Sem pontos para distribuir.");
+                continue;
+            }
+
+            int stat;
+            try {
+                stat = Integer.parseInt(input);
+            } catch (NumberFormatException e) {
+                System.out.println("Digite apenas numeros.");
+                continue;
+            }
+
+            if (stat < 1 || stat > 6) {
+                System.out.println("Opcao invalida.");
+                continue;
+            }
+
+            // Aplica o ponto no stat escolhido
+            switch (stat) {
+                case 1 -> p.setStr(p.getStr() + 1);
+                case 2 -> p.setAgi(p.getAgi() + 1);
+                case 3 -> p.setVit(p.getVit() + 1);
+                case 4 -> p.setIntelligence(p.getIntelligence() + 1);
+                case 5 -> p.setDex(p.getDex() + 1);
+                case 6 -> p.setLuk(p.getLuk() + 1);
+            }
+            p.setStatPoints(pontos - 1);
+            playerRepo.save(p);
+
+            String[] nomes = {"STR", "AGI", "VIT", "INT", "DEX", "LUK"};
+            System.out.println(">>> " + nomes[stat - 1] + " aumentou!");
+        }
     }
 
     private void renderInventoryMenu() {
