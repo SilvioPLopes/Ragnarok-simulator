@@ -46,7 +46,7 @@ class RagnarokTerminalRunnerTest {
         monsterMock.setHp(55);
 
         // Injeção de Estado Interno via Reflection (Bypassa Scanner/Random hardcoded)
-        ReflectionTestUtils.setField(runner, "currentPlayer", new com.ragnarok.domain.model.Player(1L, "Hero", null, null, 1, 1, 0L, 0L, 0L, 0, 0, null, null, null));
+        ReflectionTestUtils.setField(runner, "currentPlayer", new com.ragnarok.domain.model.Player(1L, "Hero", null, null, 1, 1, 0L, 0L, 0L, 0, 0, null, null, null, null, null));
         ReflectionTestUtils.setField(runner, "currentMonster", monsterMock);
         ReflectionTestUtils.setField(runner, "inBattle", true);
     }

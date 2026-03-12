@@ -148,6 +148,10 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
             System.out.printf("5. DEX: %d (+%d) = %d%n", p.getDex(), domainPlayer.getTotalDex() - p.getDex(), domainPlayer.getTotalDex());
             System.out.printf("6. LUK: %d (+%d) = %d%n", p.getLuk(), domainPlayer.getTotalLuk() - p.getLuk(), domainPlayer.getTotalLuk());
             System.out.println("----------------------------");
+            System.out.printf("ATK : %-5d | MATK: %d%n", domainPlayer.getTotalAtk(), domainPlayer.getTotalMAtk());
+            System.out.printf("DEF : %-5d | HIT : %d%n", domainPlayer.getTotalDef(), domainPlayer.getTotalHit());
+            System.out.printf("FLEE: %-5d |%n", domainPlayer.getTotalFlee());
+            System.out.println("----------------------------");
             System.out.printf("Base EXP: %d | Job EXP: %d%n", p.getBaseExp(), p.getJobExp());
 
             if (pontos > 0) {

@@ -31,6 +31,45 @@ public class ItemService {
         this.itemMapper = itemMapper;
     }
 
+    public com.ragnarok.domain.model.Item criarItemDeTeste(Long id, String name, int attack) {
+        ItemEntity entity = new ItemEntity();
+        entity.setId(id);
+        entity.setName(name);
+        entity.setAttack(attack);
+        entity.setDefense(0);
+        entity.setSlots(2);
+        entity.setWeight(10);
+        entity.setPrice(100);
+        entity.setType(com.ragnarok.domain.model.ItemType.WEAPON);
+        entity.setEquipSlot(com.ragnarok.domain.model.EquipSlot.HAND_R);
+        itemRepository.save(entity);
+        return itemMapper.toDomain(entity);
+    }
+
+    public void darItemAoJogador(Long playerId, long itemId, int qty) {
+        PlayerEntity player = playerRepository.findById(playerId).orElseThrow();
+        ItemEntity item = itemRepository.findById(itemId).orElseThrow();
+        PlayerItemEntity playerItem = new PlayerItemEntity();
+        playerItem.setPlayer(player);
+        playerItem.setItem(item);
+        playerItem.setAmount(qty);
+        playerItem.setEquipped(false);
+        playerItemRepository.save(playerItem);
+    }
+
+    public String equiparItem(Long playerId, UUID playerItemId) {
+        PlayerItemEntity playerItem = playerItemRepository.findById(playerItemId)
+                .orElseThrow(() -> new IllegalArgumentException("Item não encontrado no inventário."));
+        if (!playerItem.getPlayer().getId().equals(playerId)) {
+            throw new IllegalStateException("Tentativa de equipar item de outro jogador!");
+        }
+        ItemType tipo = playerItem.getItem().getType();
+        if (tipo != ItemType.WEAPON && tipo != ItemType.ARMOR) {
+            throw new IllegalArgumentException("Este item não é um equipamento.");
+        }
+        return gerenciarEquipamento(playerItem);
+    }
+
     public String usarItem(UUID playerItemId) {
         PlayerItemEntity playerItem = playerItemRepository.findById(playerItemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item não encontrado no inventário."));
@@ -79,21 +118,46 @@ public class ItemService {
 
     private String consumirItem(PlayerItemEntity itemEntity) {
         PlayerEntity player = itemEntity.getPlayer();
-        Integer poderDeCura = itemEntity.getItem().getStats().getEfeito();
+        var stats = itemEntity.getItem().getStats();
+        Integer efeitoHp = stats.getEfeito();
+        Integer efeitoSp = stats.getBonusSP();
 
-        if (poderDeCura == null || poderDeCura <= 0) {
+        boolean temEfeitoHp = efeitoHp != null && efeitoHp > 0;
+        boolean temEfeitoSp = efeitoSp != null && efeitoSp > 0;
+
+        if (!temEfeitoHp && !temEfeitoSp) {
             return "Este item não tem efeito ao ser usado.";
         }
 
         int hpAtual = player.getHpCurrent() != null ? player.getHpCurrent() : 0;
         int hpMax = player.getHpMax() != null ? player.getHpMax() : 100;
+        int spAtual = player.getSpCurrent() != null ? player.getSpCurrent() : 0;
+        int spMax = player.getSpMax() != null ? player.getSpMax() : 40;
 
-        if (hpAtual >= hpMax) {
-            return "Seu HP já está cheio!";
+        boolean hpCheio = hpAtual >= hpMax;
+        boolean spCheio = spAtual >= spMax;
+
+        if ((temEfeitoHp && hpCheio && !temEfeitoSp) || (!temEfeitoHp && temEfeitoSp && spCheio)) {
+            return temEfeitoHp ? "Seu HP já está cheio!" : "Seu SP já está cheio!";
+        }
+        if (temEfeitoHp && temEfeitoSp && hpCheio && spCheio) {
+            return "HP e SP já estão cheios!";
         }
 
-        int novoHp = Math.min(hpMax, hpAtual + poderDeCura);
-        player.setHpCurrent(novoHp);
+        int hpCurado = 0;
+        int spCurado = 0;
+
+        if (temEfeitoHp && !hpCheio) {
+            int novoHp = Math.min(hpMax, hpAtual + efeitoHp);
+            hpCurado = novoHp - hpAtual;
+            player.setHpCurrent(novoHp);
+        }
+        if (temEfeitoSp && !spCheio) {
+            int novoSp = Math.min(spMax, spAtual + efeitoSp);
+            spCurado = novoSp - spAtual;
+            player.setSpCurrent(novoSp);
+        }
+
         playerRepository.save(player);
 
         if (itemEntity.getAmount() > 1) {
@@ -103,6 +167,13 @@ public class ItemService {
             playerItemRepository.delete(itemEntity);
         }
 
-        return String.format("Você usou %s e recuperou %d de HP.", itemEntity.getItem().getName(), poderDeCura);
+        String nome = itemEntity.getItem().getName();
+        if (hpCurado > 0 && spCurado > 0) {
+            return String.format("Você usou %s e recuperou %d de HP e %d de SP.", nome, hpCurado, spCurado);
+        } else if (hpCurado > 0) {
+            return String.format("Você usou %s e recuperou %d de HP.", nome, hpCurado);
+        } else {
+            return String.format("Você usou %s e recuperou %d de SP.", nome, spCurado);
+        }
     }
 }

@@ -65,4 +65,47 @@ public class Player {
     public Integer getMaxHp() {
         return this.stats != null && this.stats.getMaxHp() != null ? this.stats.getMaxHp() : 100;
     }
+
+    public Integer getMaxSp() {
+        return this.stats != null && this.stats.getMaxSp() != null ? this.stats.getMaxSp() : 40;
+    }
+
+    public Integer getTotalAtk() {
+        int statusAtk = getTotalStr() * 2;
+        int weaponAtk = getEquipments().stream()
+                .mapToInt(i -> (i.getItemDefinition() != null && i.getItemDefinition().getStats() != null
+                        && i.getItemDefinition().getStats().getAttack() != null)
+                        ? i.getItemDefinition().getStats().getAttack() : 0)
+                .sum();
+        return statusAtk + weaponAtk;
+    }
+
+    public Integer getTotalMAtk() {
+        int statusMAtk = getTotalInt() * 2;
+        int weaponMAtk = getEquipments().stream()
+                .mapToInt(i -> (i.getItemDefinition() != null && i.getItemDefinition().getStats() != null
+                        && i.getItemDefinition().getStats().getMAttack() != null)
+                        ? i.getItemDefinition().getStats().getMAttack() : 0)
+                .sum();
+        return statusMAtk + weaponMAtk;
+    }
+
+    public Integer getTotalDef() {
+        int armorDef = getEquipments().stream()
+                .mapToInt(i -> (i.getItemDefinition() != null && i.getItemDefinition().getStats() != null
+                        && i.getItemDefinition().getStats().getDefense() != null)
+                        ? i.getItemDefinition().getStats().getDefense() : 0)
+                .sum();
+        return getTotalVit() + armorDef;
+    }
+
+    public Integer getTotalHit() {
+        int level = baseLevel != null ? baseLevel : 1;
+        return getTotalDex() + level;
+    }
+
+    public Integer getTotalFlee() {
+        int level = baseLevel != null ? baseLevel : 1;
+        return getTotalAgi() + level;
+    }
 }
