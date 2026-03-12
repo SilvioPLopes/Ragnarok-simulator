@@ -4,15 +4,18 @@ Este projeto é o núcleo (Core) de um sistema de emulação e gerenciamento de 
 
 ---
 
-## ✅ Status do Projeto (Fase 1 & 2 em Andamento)
+## ✅ Status do Projeto
+
 - **Arquitetura:** Hexagonal (Domain, Application, Infrastructure).
 - **Dados do jogo:** Importados do rAthena `db/re/` — 2675 monstros, todos os itens, 1864 warps, 2374 spawns, 12544 drops.
 - **Navegação:** Player se move entre mapas reais usando portais do rAthena.
 - **Engine de Batalha:** Cálculo de dano físico (Status + Equipamentos + Defesa), counter-ataque do monstro e Lógica de Turnos.
 - **Sistema de Loot:** Drop de itens baseado em taxas reais do rAthena (RNG 1-10000) persistido no inventário.
 - **Sistema de Nível:** Gestão de Experiência (Base/Job), Level Up automático e pontos de atributos.
+- **Distribuição de Stats:** Menu terminal para gastar `statPoints` nos atributos (STR/AGI/VIT/INT/DEX/LUK).
+- **Sistema de Skills:** Catálogo de skills por classe (`skill_tree`), prerequisites AND-logic, aprendizado com `skillPoints`, menu terminal acessível via `S` no status.
 - **ETL Pipeline:** Scripts Python em `scriptsPython/` para importar dados do rAthena para o banco.
-- **Testes:** Testes de integração cobrindo o ciclo "Atacar -> Matar -> Dropar -> Upar".
+- **Testes:** Testes de integração cobrindo o ciclo "Atacar -> Matar -> Dropar -> Upar" e o sistema de skills.
 
 ---
 
@@ -32,6 +35,8 @@ O projeto segue estritamente a separação de responsabilidades definida pela ar
     * `MonsterCatalogService`: Coordena a busca na API e o salvamento no Banco.
     * `PlayerService`: Gerencia a criação de personagens e regras iniciais.
     * `BattleService`: Gerencia o ciclo de combate, morte e recompensas.
+    * `SkillService`: Lista skills disponíveis por classe, valida pré-requisitos e processa o aprendizado.
+    * `SkillRowDTO`: Record público com os dados de uma skill para exibição no terminal.
 
 ### 3. Infrastructure (`com.ragnarok.infrastructure`)
 * **O que é:** Os adaptadores para o mundo externo.
@@ -83,6 +88,9 @@ Poring aparece com probabilidade proporcional ao seu amount.
 | `monster_drops` | `monster_drops.sql` | 12544 drops com rate real do rAthena |
 | `players` | MockMapLoader (startup) | Jogador inicial |
 | `player_items` | Gerado em combate | Inventário do jogador |
+| `skills` | SQL manual / seed | Catálogo de skills (aegis_name, name, type) |
+| `skill_tree` | SQL manual / seed | Árvore de skills por classe (job_class, skill_id, max_level, prereqs) |
+| `player_skills` | JPA ddl-auto | Skills aprendidas (player_id, skill_id, current_level) — auto-criada no startup |
 | `monster_spawns` | MockMapLoader (startup) | Legado — substituído por `map_monsters` |
 
 ### Rodando migrações
@@ -134,17 +142,29 @@ com.ragnarok
 │   └── service
 │       ├── MonsterCatalogService.java
 │       ├── PlayerService.java
-│       ├── ItemService.java            # Gestão de Itens
-│       └── BattleService.java
+│       ├── ItemService.java            # Gestão de Itens e Auto-Swap de equipamentos
+│       ├── BattleService.java
+│       ├── SkillService.java           # listarSkillsDoPlayer + aprenderSkill
+│       └── SkillRowDTO.java            # Record público para exibição de skill no terminal
 │
 ├── domain
 │   └── model
 │   │   ├── Monster.java
 │   │   ├── Player.java
-│   │   ├── Item.java                   # Modelo Puro de Item
+│   │   ├── Item.java
 │   │   ├── ItemStats.java              # Value Object
+│   │   ├── ItemType.java
+│   │   ├── EquipSlot.java
+│   │   ├── JobClass.java
+│   │   ├── BattleResult.java
+│   │   ├── ElementalDamage.java
+│   │   ├── MainAttributes.java
+│   │   ├── MainStats.java
 │   │   ├── MonsterDrop.java
-│   │   └── ...
+│   │   ├── PlayerItem.java
+│   │   ├── PlayerLocation.java
+│   │   ├── PlayerStats.java
+│   │   └── ItemDropInfo.java
 │   └── service
 │       ├── BattleEngine.java
 │       └── LevelingService.java        # Matemática de XP e Nível
@@ -154,29 +174,38 @@ com.ragnarok
     │   ├── RagnapiClient.java
     │   ├── dto
     │   │   ├── MonsterDTO.java
-    │   │   └── ItemDTO.java            # DTO para API externa
+    │   │   └── ItemDTO.java
     │   └── mapper
-    │       ├── MonsterMapper.java      # Conversor de API (DTO -> Domain)
-    │       ├── ItemMapper.java         # Conversor Híbrido (DTO <-> Domain <-> Entity)
-    │       └── PlayerMapper.java
+    │       ├── MonsterMapper.java
+    │       ├── ItemMapper.java
+    │       └── PlayerMapper.java       # Safe Unboxing (NULL -> 0)
     │
     └── persistence
         ├── MonsterEntity.java
         ├── MonsterRepository.java
         ├── MonsterSpawnEntity.java     # Legado — substituído por MapMonsterEntity
+        ├── MonsterSpawnRepository.java # Legado
         ├── MonsterDropEntity.java
-        ├── GameMapEntity.java          # Tabela de Mapas (moc_fild08)
+        ├── GameMapEntity.java
         ├── GameMapRepository.java
-        ├── MapPortalEntity.java        # Portais reais do rAthena
+        ├── MapPortalEntity.java
         ├── MapPortalRepository.java
         ├── MapMonsterEntity.java       # Spawns por mapa com amount (peso)
         ├── MapMonsterRepository.java
         ├── PlayerEntity.java
         ├── PlayerRepository.java
-        ├── PlayerItemEntity.java
-        ├── PlayerMapper.java           # Mapper de Banco junto com Persistência
-        ├── ItemEntity.java             # Tabela 'items'
-        └── ItemRepository.java
+        ├── PlayerItemEntity.java       # UUID PK, flag is_equipped
+        ├── PlayerItemRepository.java
+        ├── ItemEntity.java
+        ├── ItemRepository.java
+        ├── SkillEntity.java            # Tabela 'skills'
+        ├── SkillRepository.java        # findByAegisName()
+        ├── SkillTreeEntity.java        # Tabela 'skill_tree' (read-only)
+        ├── SkillTreeRepository.java    # findByJobClassIgnoreCase()
+        ├── PlayerSkillEntity.java      # Tabela 'player_skills' (UUID PK)
+        ├── PlayerSkillRepository.java  # findByPlayerId(), findByPlayerIdAndSkillId()
+        └── mapper
+            └── PlayerMapper.java
 ```
 
 ---
@@ -238,7 +267,14 @@ Fluxo completo de combate, recompensa e evolução de personagem.
 4. **Encontro:** `MapMonsterRepository.findByMapId(mapaAtual)` retorna spawns do mapa. Sorteio ponderado pelo `amount`.
 5. **Morte:** Player revive em `prontera`, `mapName` resetado.
 
-### 6. "Safety & Resilience" (Null Safety)
+### 6. "Skills System" (Aprendizado e Pré-requisitos)
+1. **Trigger:** Jogador abre o menu de Status → digita `S`.
+2. **Listagem:** `SkillService.listarSkillsDoPlayer(playerId)` busca a `skill_tree` da classe do player e resolve pré-requisitos com AND-logic. Retorna lista de `SkillRowDTO`.
+3. **Exibição:** Terminal mostra status `[DISPONIVEL]`, `[BLOQUEADA: motivo]`, `[APRENDIDA]` ou `[MAX]` para cada skill.
+4. **Aprendizado:** Jogador digita o número da skill → `SkillService.aprenderSkill(playerId, aegisName)` valida classe, pré-requisitos, nível máximo e `skillPoints`. Se válido, faz upsert em `player_skills` e decrementa `skillPoints` do player.
+5. **Erros:** Violações lançam `IllegalStateException` capturada pelo terminal e exibida ao jogador.
+
+### 7. "Safety & Resilience" (Null Safety)
 Camada de proteção contra inconsistências de dados legados ou falhas de banco.
 
 1. **Mapper Blindado:** `PlayerMapper` implementa *Safe Unboxing*.
@@ -289,6 +325,9 @@ Camada de proteção contra inconsistências de dados legados ou falhas de banco
     * *Função original:* Resolve o relacionamento Muitos-para-Muitos (Monstros <-> Mapas), controlando quantidade e respawn.
 * **MonsterDropEntity:** Tabela `monster_drops`. Tabela associativa que liga Monstros e Itens com taxa de chance real do rAthena (1-10000).
 * **PlayerItemEntity:** Tabela `player_items`. Representa o inventário, contendo UUID próprio, referência ao Item, refino e flag `is_equipped`.
+* **SkillEntity:** Tabela `skills`. Catálogo de skills com `aegisName`, `name` e `type`.
+* **SkillTreeEntity:** Tabela `skill_tree`. Read-only. Cada linha representa uma skill disponível para uma classe, com `maxLevel`, `prereqSkill` e `prereqLevel`. Uma skill pode ter múltiplas linhas (um pré-requisito por linha).
+* **PlayerSkillEntity:** Tabela `player_skills`. Criada automaticamente via JPA. Armazena o nível atual de cada skill aprendida pelo player (UUID PK, unique constraint em `player_id + skill_id`).
 
 ### Mappers (Camada de Tradução e Segurança)
 
@@ -312,6 +351,8 @@ O projeto mantém uma bateria de testes de integração focados nos fluxos crít
 * **BattleLootIntegrationTest:** Valida a tabela de drop (RNG) e o salvamento do item na mochila.
 * **LevelingIntegrationTest:** Valida a curva de experiência, o reset de XP excedente e a entrega de recompensas (Pontos e Full Heal).
 * **PlayerInventoryTest:** Valida a lógica de `Equip`/`Unequip` e a troca automática de slots (Auto-Swap).
+* **SkillServiceIntegrationTest:** Valida `listarSkillsDoPlayer` — lista não vazia para Novice, marcação de skills disponíveis com skillPoints > 0.
+* **SkillServiceAprenderTest:** Valida `aprenderSkill` — incremento de nível, decremento de skillPoints, `IllegalStateException` sem pontos ou em nível máximo.
 
 ---
 
@@ -319,13 +360,14 @@ O projeto mantém uma bateria de testes de integração focados nos fluxos crít
 
 O foco atual é fechar o ciclo de progressão do jogador e aumentar a complexidade do combate.
 
+### ✅ Concluído (Features Implementadas)
+* **Menu de Distribuição de Stats:** Terminal permite gastar `statPoints` nos 6 atributos base.
+* **Sistema de Skills:** Entidades `skill_tree`/`player_skills`, `SkillService` com listagem e aprendizado, menu terminal via `S` no status.
+
 ### Prioridade Alta (Próxima Sprint)
-1. **Menu de Distribuição (UI):** Criar interface no Terminal para o jogador gastar os `statPoints` acumulados.
-2. **Sistema de Habilidades (Skills):**
-    * Criar entidade `Skill` e `PlayerSkill`.
-    * Implementar menu para gastar `skillPoints`.
-    * Integrar skills na `BattleEngine` (Dano Mágico/Físico Especial).
-3. **Refatoração Elementar:** Atualizar a Engine para considerar os elementos (Fogo x Água) e tamanhos (Pequeno/Médio/Grande) no cálculo de dano.
+1. **Skills na Engine de Batalha:** Integrar skills aprendidas na `BattleEngine` (dano mágico, habilidades especiais).
+2. **Refatoração Elementar:** Considerar elementos (Fogo x Água) e tamanhos (Pequeno/Médio/Grande) no cálculo de dano.
+3. **Seed de Skills:** Popular as tabelas `skills` e `skill_tree` com dados reais do rAthena via script Python ou SQL.
 
 ### Futuro
 * **Persistência de Estado do Mapa:** Salvar a posição (X,Y) do jogador ao sair.

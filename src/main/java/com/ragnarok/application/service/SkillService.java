@@ -79,7 +79,57 @@ public class SkillService {
 
     @Transactional
     public String aprenderSkill(Long playerId, String aegisName) {
-        // Implementado na Task 6
-        throw new UnsupportedOperationException("não implementado ainda");
+        PlayerEntity player = playerRepository.findById(playerId).orElseThrow();
+        int skillPoints = player.getSkillPoints() != null ? player.getSkillPoints() : 0;
+
+        if (skillPoints <= 0) {
+            throw new IllegalStateException("Sem Skill Points");
+        }
+
+        List<SkillTreeEntity> linhas = skillTreeRepository
+                .findByJobClassIgnoreCaseAndSkillId(player.getJobClass(), aegisName);
+
+        if (linhas.isEmpty()) {
+            throw new IllegalStateException("Skill " + aegisName + " não encontrada para a classe " + player.getJobClass());
+        }
+
+        int maxLevel = linhas.get(0).getMaxLevel() != null ? linhas.get(0).getMaxLevel() : 1;
+
+        Map<String, Integer> playerSkillLevels = playerSkillRepository.findByPlayerId(playerId)
+                .stream()
+                .collect(Collectors.toMap(PlayerSkillEntity::getSkillId, PlayerSkillEntity::getCurrentLevel));
+
+        int currentLevel = playerSkillLevels.getOrDefault(aegisName, 0);
+
+        if (currentLevel >= maxLevel) {
+            throw new IllegalStateException("Skill " + aegisName + " já está no nível máximo (" + maxLevel + ")");
+        }
+
+        for (SkillTreeEntity linha : linhas) {
+            if (linha.getPrereqSkill() != null && !linha.getPrereqSkill().isBlank()) {
+                int prereqLevel = linha.getPrereqLevel() != null ? linha.getPrereqLevel() : 1;
+                int playerPrereqLevel = playerSkillLevels.getOrDefault(linha.getPrereqSkill(), 0);
+                if (playerPrereqLevel < prereqLevel) {
+                    throw new IllegalStateException("Requer " + linha.getPrereqSkill() + " Lv" + prereqLevel);
+                }
+            }
+        }
+
+        var playerSkill = playerSkillRepository.findByPlayerIdAndSkillId(playerId, aegisName)
+                .orElseGet(() -> {
+                    var nova = new PlayerSkillEntity();
+                    nova.setPlayerId(playerId);
+                    nova.setSkillId(aegisName);
+                    nova.setCurrentLevel(0);
+                    return nova;
+                });
+
+        playerSkill.setCurrentLevel(playerSkill.getCurrentLevel() + 1);
+        playerSkillRepository.save(playerSkill);
+
+        player.setSkillPoints(skillPoints - 1);
+        playerRepository.save(player);
+
+        return aegisName + " agora está no nível " + playerSkill.getCurrentLevel();
     }
 }

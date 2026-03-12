@@ -5,4 +5,5 @@ import java.util.List;
 
 public interface SkillTreeRepository extends JpaRepository<SkillTreeEntity, Integer> {
     List<SkillTreeEntity> findByJobClassIgnoreCase(String jobClass);
+    List<SkillTreeEntity> findByJobClassIgnoreCaseAndSkillId(String jobClass, String skillId);
 }

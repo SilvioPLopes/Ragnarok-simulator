@@ -49,6 +49,9 @@ com.ragnarok
 | `monster_drops` | `monster_drops.sql` | 12544 drops de `db/re/mob_db.yml` com rate 1-10000 |
 | `players` | MockMapLoader (startup) | Jogador ID=1 "Hero" |
 | `player_items` | Gerado em combate | Inventário do jogador |
+| `skills` | SQL manual / seed | Catálogo de skills (aegis_name, name, type) |
+| `skill_tree` | SQL manual / seed | Árvore de skills por classe (job_class, skill_id, max_level, prereqs) |
+| `player_skills` | JPA ddl-auto / combate | Skills aprendidas pelo player (player_id, skill_id, current_level) |
 | `monster_spawns` | MockMapLoader (startup) | Legado — substituído por `map_monsters` |
 
 ### Rodando migrações SQL
@@ -115,6 +118,17 @@ Main game loop with two states: exploration and battle.
 4. Ver Status
 5. Sair
 
+**Status menu (`renderStatusMenu`):**
+- Shows full player stats (STR/AGI/VIT/INT/DEX/LUK + derived stats)
+- Inputs 1-6 distribute `statPoints` into the chosen stat
+- Input `S` opens the Skills menu (`renderSkillsMenu`)
+
+**Skills menu (`renderSkillsMenu`):**
+- Lists all skills available for player's `jobClass` from `skill_tree`
+- Shows current level, max level and status: `[DISPONIVEL]`, `[BLOQUEADA]`, `[APRENDIDA]`, `[MAX]`
+- Selecting a DISPONIVEL skill calls `SkillService.aprenderSkill` — increments level and deducts 1 `skillPoints`
+- Prerequisite violations and "Sem Skill Points" reported via `IllegalStateException` caught and displayed
+
 **Battle menu:**
 - Shows player HP and monster HP each turn
 - Attack calls `BattleService.realizarAtaque`
@@ -166,11 +180,28 @@ options.setCodePointLimit(50 * 1024 * 1024);
 ./mvnw test -Dtest=BattleIntegrationTest
 ```
 
+## Skills System
+
+**Entities:** `SkillEntity` → `skills` table, `SkillTreeEntity` → `skill_tree` (read-only), `PlayerSkillEntity` → `player_skills` (JPA creates via ddl-auto).
+
+**Repositories:**
+- `SkillRepository` — `findByAegisName(String)`
+- `SkillTreeRepository` — `findByJobClassIgnoreCase(String)`, `findByJobClassIgnoreCaseAndSkillId(String, String)`
+- `PlayerSkillRepository` — `findByPlayerId(Long)`, `findByPlayerIdAndSkillId(Long, String)`
+
+**Application layer:**
+- `SkillRowDTO` — public record used by terminal: `aegisName`, `name`, `maxLevel`, `currentLevel`, `canLearn`, `blockedReason`
+- `SkillService.listarSkillsDoPlayer(Long)` — groups skill_tree rows by skillId, resolves prereqs (AND-logic), returns sorted list
+- `SkillService.aprenderSkill(Long, String)` — validates class, prereqs, max level, skillPoints; upserts `PlayerSkillEntity`; throws `IllegalStateException` on violations
+
+**Prereq logic:** Each skill may have multiple rows in `skill_tree` (one per prereq). All prereqs must be satisfied (AND). Prereqs are looked up from `playerSkillLevels` map, not filtered by job_class.
+
+**Terminal access:** Status menu → `S` → `renderSkillsMenu()` in `RagnarokTerminalRunner`.
+
 ## Roadmap (Next Priorities)
 
-1. **Stat distribution menu** — Terminal UI to spend `statPoints`
-2. **Skills system** — `Skill`, `PlayerSkill` entities, `skillPoints` spending
-3. **Elemental damage** — element + size modifiers in `BattleEngine`
-4. **Map state persistence** — save player X,Y position
-5. **NPC shop system** — buy/sell with Zenny
-6. **World border connections** — fields connected by border (not NPC warps) are not yet in `map_portals`
+1. **Elemental damage** — element + size modifiers in `BattleEngine`
+2. **Map state persistence** — save player X,Y position
+3. **NPC shop system** — buy/sell with Zenny
+4. **World border connections** — fields connected by border (not NPC warps) are not yet in `map_portals`
+5. **Skills in battle** — integrate learned skills into `BattleEngine` (magic/special damage)

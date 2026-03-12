@@ -3,6 +3,8 @@ package com.ragnarok.runner;
 import com.ragnarok.application.service.BattleService;
 import com.ragnarok.application.service.ItemService;
 import com.ragnarok.application.service.PlayerService;
+import com.ragnarok.application.service.SkillRowDTO;
+import com.ragnarok.application.service.SkillService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
@@ -25,6 +27,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     private final MonsterRepository monsterRepo;
     private final PlayerMapper playerMapper;
     private final MapPortalRepository portalRepo;
+    private final SkillService skillService;
 
     private final Scanner scanner = new Scanner(System.in);
     private final Random rng = new Random();
@@ -36,7 +39,8 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     public RagnarokTerminalRunner(BattleService bs, PlayerService ps, ItemService is,
                                   PlayerRepository pr, PlayerItemRepository pir,
                                   MapMonsterRepository mmr, MonsterRepository mr,
-                                  PlayerMapper pm, MapPortalRepository portalRepo) {
+                                  PlayerMapper pm, MapPortalRepository portalRepo,
+                                  SkillService skillService) {
         this.battleService    = bs;
         this.playerService    = ps;
         this.itemService      = is;
@@ -46,6 +50,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         this.monsterRepo      = mr;
         this.playerMapper     = pm;
         this.portalRepo       = portalRepo;
+        this.skillService     = skillService;
     }
 
     @Override
@@ -160,12 +165,18 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
                 System.out.println("Stat Points: 0");
             }
 
+            System.out.println("S. Skills");
             System.out.println("0. Voltar");
             System.out.print("> ");
 
             String input = scanner.nextLine().trim();
 
             if ("0".equals(input) || input.isEmpty()) return;
+
+            if ("S".equalsIgnoreCase(input)) {
+                renderSkillsMenu();
+                continue;
+            }
 
             if (pontos <= 0) {
                 System.out.println("Sem pontos para distribuir.");
@@ -235,6 +246,78 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
             }
         } catch (NumberFormatException e) {
             System.out.println("Digite apenas numeros.");
+        }
+    }
+
+    private void renderSkillsMenu() {
+        while (true) {
+            PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+            int skillPts = p.getSkillPoints() != null ? p.getSkillPoints() : 0;
+
+            List<SkillRowDTO> skills = skillService.listarSkillsDoPlayer(currentPlayer.getId());
+
+            System.out.println("\n=== SKILLS (Skill Points: " + skillPts + ") ===");
+            System.out.println("Classe: " + (p.getJobClass() != null ? p.getJobClass().toUpperCase() : "?"));
+            System.out.println();
+
+            if (skills.isEmpty()) {
+                System.out.println("Nenhuma skill disponivel para sua classe.");
+                System.out.println("(Pressione ENTER para voltar)");
+                scanner.nextLine();
+                return;
+            }
+
+            for (int i = 0; i < skills.size(); i++) {
+                SkillRowDTO sk = skills.get(i);
+                String status;
+                if (sk.currentLevel() >= sk.maxLevel()) {
+                    status = "[MAX]";
+                } else if (sk.currentLevel() > 0 && sk.canLearn()) {
+                    status = "[APRENDIDA]";
+                } else if (sk.currentLevel() > 0) {
+                    status = "[APRENDIDA - " + sk.blockedReason() + "]";
+                } else if (!sk.canLearn()) {
+                    status = "[BLOQUEADA: " + sk.blockedReason() + "]";
+                } else {
+                    status = "[DISPONIVEL]";
+                }
+                System.out.printf("%-3d [%-20s] %-30s Lv %d/%-3d %s%n",
+                        (i + 1), sk.aegisName(), sk.name(), sk.currentLevel(), sk.maxLevel(), status);
+            }
+
+            System.out.println("0. Voltar");
+            System.out.print("> ");
+
+            String input = scanner.nextLine().trim();
+
+            if ("0".equals(input) || input.isEmpty()) return;
+
+            int escolha;
+            try {
+                escolha = Integer.parseInt(input);
+            } catch (NumberFormatException e) {
+                System.out.println("Digite apenas numeros.");
+                continue;
+            }
+
+            if (escolha < 1 || escolha > skills.size()) {
+                System.out.println("Opcao invalida.");
+                continue;
+            }
+
+            SkillRowDTO selecionada = skills.get(escolha - 1);
+
+            if (!selecionada.canLearn()) {
+                System.out.println(">>> " + selecionada.blockedReason());
+                continue;
+            }
+
+            try {
+                String resultado = skillService.aprenderSkill(currentPlayer.getId(), selecionada.aegisName());
+                System.out.println(">>> " + resultado);
+            } catch (IllegalStateException e) {
+                System.out.println(">>> " + e.getMessage());
+            }
         }
     }
 
