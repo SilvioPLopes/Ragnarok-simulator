@@ -148,7 +148,8 @@ com.ragnarok
 │       ├── ItemService.java            # Gestão de Itens e Auto-Swap de equipamentos
 │       ├── BattleService.java
 │       ├── SkillService.java           # listarSkillsDoPlayer + aprenderSkill
-│       └── SkillRowDTO.java            # Record público para exibição de skill no terminal
+│       ├── SkillRowDTO.java            # Record público para exibição de skill no terminal
+│       └── ClassChangeService.java     # listarClassesDisponiveis + trocarClasse
 │
 ├── domain
 │   └── model
@@ -356,6 +357,13 @@ O projeto mantém uma bateria de testes de integração focados nos fluxos crít
 * **PlayerInventoryTest:** Valida a lógica de `Equip`/`Unequip` e a troca automática de slots (Auto-Swap).
 * **SkillServiceIntegrationTest:** Valida `listarSkillsDoPlayer` — lista não vazia para Novice, marcação de skills disponíveis com skillPoints > 0.
 * **SkillServiceAprenderTest:** Valida `aprenderSkill` — incremento de nível, decremento de skillPoints, `IllegalStateException` sem pontos ou em nível máximo.
+* **ClassChangeIntegrationTest:** Valida troca de classe no banco real — `trocarClasse` persiste `jobClass/jobLevel/jobExp`, `listarClassesDisponiveis` retorna tier-1 para NOVICE.
+
+### 🟢 Unit Tests (Mockito)
+* **BattleEngineTest:** 17 cenários cobrindo fórmula de dano, dano mínimo 1, DEF=0, loot 100%/0%, counter-attack e null guards.
+* **BattleServiceTest:** 8 cenários — ataque normal, morte do monstro (VITÓRIA), contra-ataque, morte do jogador (FATAL), player/monster not found, player já morto.
+* **ClassChangeServiceTest:** Cenários de `listarClassesDisponiveis` e `trocarClasse` com mocks de repositórios.
+* **RagnarokTerminalRunnerTest:** Valida ressurreição automática do jogador ao receber `FATAL` do BattleService.
 
 ---
 
@@ -367,16 +375,15 @@ O projeto mantém uma bateria de testes de integração focados nos fluxos crít
 * **Sistema de Troca de Classe:** `ClassChangeService`, progressão NOVICE→tier1→tier2, menu terminal via `C` no status.
 * **Startup automático:** `StartupDataLoader` popula todas as tabelas na inicialização — zero scripts manuais.
 * **LevelingService:** Caps de nível base/job por classe.
+* **Limpeza de tela no terminal:** `clearScreen()` com ANSI codes entre cada menu — sem scroll infinito.
+* **Inventário empilha corretamente:** Drop de item existente incrementa `amount` no mesmo slot.
+* **Stat/skill points acumulam em multi-levelup:** `PlayerMapper.toDomain` agora mapeia `statPoints` e `skillPoints` do banco antes de aplicar os ganhos do level up.
 
 ---
 
 ### 🐛 Bugs Conhecidos
 
-| # | Bug | Descrição |
-|---|-----|-----------|
-| B1 | **Inventário não empilha** | Dropar dois Blue Herb cria dois slots separados em vez de empilhar (`amount += 1`). Itens iguais deveriam ser somados no mesmo slot. |
-| B2 | **Stat points somem ao upar dois níveis seguidos** | Ao ganhar dois level ups no mesmo combate, os pontos de atributo do segundo nível não aparecem no menu. Provável bug de leitura stale do banco entre level ups. |
-| B3 | **Espadachim ausente no menu de troca de classe** | `SWORDSMAN` está no `JobClass` enum mas pode estar ausente no `skill_tree` do banco, fazendo `listarClassesDisponiveis` filtrá-lo para fora. |
+Nenhum bug conhecido no momento.
 
 ---
 
@@ -397,8 +404,7 @@ O projeto mantém uma bateria de testes de integração focados nos fluxos crít
 7. **Troca de classe restrita a NPCs** — atualmente disponível em qualquer lugar. Deveria ser permitida apenas em cidades/NPCs específicos (ex: Prontera para tier 1, locais específicos para tier 2).
 
 #### Experiência / UX
-8. **Terminal com limpeza de tela** — usar `cls`/`clear` (ou códigos ANSI) entre cada menu para dar sensação de jogo real em vez de scroll infinito no terminal da IDE.
-9. **Dano mágico testável** — INT não tem mecânica visível ainda. Implementar e documentar a fórmula.
+8. **Dano mágico testável** — INT não tem mecânica visível ainda. Implementar e documentar a fórmula.
 
 #### Futuro
 * **Persistência de posição (X,Y)** — salvar coordenadas ao sair, não apenas o mapa.
