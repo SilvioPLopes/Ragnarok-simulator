@@ -69,6 +69,11 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         gameLoop();
     }
 
+    private void clearScreen() {
+        System.out.print("\033[H\033[2J");
+        System.out.flush();
+    }
+
     private void gameLoop() {
         while (true) {
             try {
@@ -83,6 +88,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     }
 
     private void renderExplorationMenu() {
+        clearScreen();
         PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
         String mapaAtual = p.getMapName() != null ? p.getMapName() : "prontera";
 
@@ -103,6 +109,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     }
 
     private void renderPortaisMenu(String mapaAtual) {
+        clearScreen();
         List<String> destinos = portalRepo.findDestinosByMapFrom(mapaAtual)
                 .stream().filter(d -> !d.equals(mapaAtual)).toList();
 
@@ -142,6 +149,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
     private void renderStatusMenu() {
         while (true) {
+            clearScreen();
             PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
             Player domainPlayer = playerMapper.toDomain(p);
             int pontos = p.getStatPoints() != null ? p.getStatPoints() : 0;
@@ -224,6 +232,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     }
 
     private void renderClassChangeMenu() {
+        clearScreen();
         PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
         List<JobClass> disponiveis = classChangeService.listarClassesDisponiveis(currentPlayer.getId());
 
@@ -269,6 +278,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     }
 
     private void renderInventoryMenu() {
+        clearScreen();
         System.out.println("\n=== INVENTARIO ===");
         List<PlayerItemEntity> itens = playerItemRepo.findByPlayerId(currentPlayer.getId());
 
@@ -306,6 +316,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
     private void renderSkillsMenu() {
         while (true) {
+            clearScreen();
             PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
             int skillPts = p.getSkillPoints() != null ? p.getSkillPoints() : 0;
 
@@ -377,6 +388,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     }
 
     private void renderBattleMenu() {
+        clearScreen();
         PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
 
         System.out.println("\n================================================");

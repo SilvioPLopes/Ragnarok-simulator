@@ -1,7 +1,9 @@
 package com.ragnarok.runner;
 
-import com.ragnarok.application.service.BattleService;
+import com.ragnarok.application.service.*;
+import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.*;
+import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,9 +24,16 @@ import static org.mockito.Mockito.*;
 class RagnarokTerminalRunnerTest {
 
     @Mock private BattleService battleService;
+    @Mock private PlayerService playerService;
+    @Mock private ItemService itemService;
     @Mock private PlayerRepository playerRepo;
-    @Mock private MonsterSpawnRepository spawnRepo;
+    @Mock private PlayerItemRepository playerItemRepo;
+    @Mock private MapMonsterRepository mapMonsterRepo;
     @Mock private MonsterRepository monsterRepo;
+    @Mock private PlayerMapper playerMapper;
+    @Mock private MapPortalRepository portalRepo;
+    @Mock private SkillService skillService;
+    @Mock private ClassChangeService classChangeService;
 
     @InjectMocks
     private RagnarokTerminalRunner runner;
@@ -34,10 +43,9 @@ class RagnarokTerminalRunnerTest {
 
     @BeforeEach
     void setup() {
-        // Setup de Dados
         playerMock = new PlayerEntity();
         playerMock.setId(1L);
-        playerMock.setHpCurrent(0); // Morto
+        playerMock.setHpCurrent(0);
         playerMock.setHpMax(100);
 
         monsterMock = new MonsterEntity();
@@ -45,8 +53,9 @@ class RagnarokTerminalRunnerTest {
         monsterMock.setName("Drops");
         monsterMock.setHp(55);
 
-        // Injeção de Estado Interno via Reflection (Bypassa Scanner/Random hardcoded)
-        ReflectionTestUtils.setField(runner, "currentPlayer", new com.ragnarok.domain.model.Player(1L, "Hero", null, null, 1, 1, 0L, 0L, 0L, 0, 0, null, null, null, null, null));
+        Player currentPlayer = new Player();
+        currentPlayer.setId(1L);
+        ReflectionTestUtils.setField(runner, "currentPlayer", currentPlayer);
         ReflectionTestUtils.setField(runner, "currentMonster", monsterMock);
         ReflectionTestUtils.setField(runner, "inBattle", true);
     }
@@ -54,24 +63,17 @@ class RagnarokTerminalRunnerTest {
     @Test
     @DisplayName("Runner: Deve ressuscitar jogador automaticamente ao receber FATAL do serviço")
     void deveRessuscitarJogadorAposMorte() {
-        // 1. Simula Input: "1" (Atacar)
         System.setIn(new ByteArrayInputStream("1\n".getBytes()));
-        Scanner scannerMock = new Scanner(System.in);
-        ReflectionTestUtils.setField(runner, "scanner", scannerMock);
+        ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
 
-        // 2. Mock do Comportamento
         when(battleService.realizarAtaque(anyLong(), anyLong()))
                 .thenReturn("FATAL: Você recebeu dano massivo e morreu.");
-
         when(playerRepo.findById(1L)).thenReturn(Optional.of(playerMock));
 
-        // 3. Execução (Chama apenas o método de menu para isolar o teste)
         ReflectionTestUtils.invokeMethod(runner, "renderBattleMenu");
 
-        // 4. Validação: Verifica se o jogador foi salvo com HP Cheio
-        verify(playerRepo).save(argThat(p -> p.getHpCurrent() == 100));
-
-        // Verifica se saiu de batalha
-        assert !((boolean) ReflectionTestUtils.getField(runner, "inBattle"));
+        verify(playerService).ressuscitarJogador(1L);
+        boolean inBattle = (boolean) ReflectionTestUtils.getField(runner, "inBattle");
+        assert !inBattle;
     }
 }

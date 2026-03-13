@@ -37,9 +37,10 @@ public class MonsterCatalogService {
         // 1. Busca na API
         MonsterDTO dto = ragnapiClient.getMonsterById(monsterId);
 
-        // 2. Conversão Básica
+        // 2. Conversão Básica — carrega entidade gerenciada se já existir no banco
         Monster domain = monsterMapper.toDomain(dto);
-        MonsterEntity monsterEntity = monsterMapper.toEntity(domain);
+        MonsterEntity monsterEntity = monsterRepository.findById(monsterId)
+                .orElseGet(() -> monsterMapper.toEntity(domain));
 
         // 3. MINERAÇÃO DE DROPS (Lógica existente)
         if (dto.drops() != null) {
