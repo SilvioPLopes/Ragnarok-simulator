@@ -87,8 +87,9 @@ public class BattleService {
             return String.format("FATAL: Você causou %d de dano, mas o %s contra-atacou com %d e você morreu.", damage, monster.getName(), monsterDamage);
         }
 
-        return String.format("ATAQUE: Voce causou %d de dano no %s. (HP restante: %d)\n  >> %s contra-atacou e causou %d de dano em voce!",
-                damage, monster.getName(), newHp, monster.getName(), monsterDamage);
+        String arma = identificarArma(player);
+        return String.format("ATAQUE: Voce causou %d de dano no %s com %s. (HP restante: %d)\n  >> %s contra-atacou e causou %d de dano em voce!",
+                damage, monster.getName(), arma, newHp, monster.getName(), monsterDamage);
     }
 
     private String processarMorteMonstro(PlayerEntity playerEntity, Monster monsterDomain) {
@@ -102,13 +103,27 @@ public class BattleService {
         } else {
             log.append("Loot: ");
             for (Item itemDomain : loots) {
-                PlayerItemEntity newItem = new PlayerItemEntity();
-                newItem.setPlayer(playerEntity);
-                newItem.setItem(itemMapper.toEntity(itemDomain));
-                newItem.setAmount(1);
-                newItem.setRefineLevel(0);
-                newItem.setEquipped(false);
-                playerItemRepository.save(newItem);
+                ItemEntity itemEntity = itemMapper.toEntity(itemDomain);
+                java.util.List<PlayerItemEntity> existing =
+                        playerItemRepository.findByPlayerIdAndItemId(playerEntity.getId(), itemEntity.getId());
+                if (!existing.isEmpty()) {
+                    // Mescla todos os duplicados no primeiro slot e remove os demais
+                    PlayerItemEntity stack = existing.get(0);
+                    int total = existing.stream().mapToInt(e -> e.getAmount() != null ? e.getAmount() : 1).sum();
+                    stack.setAmount(total + 1);
+                    playerItemRepository.save(stack);
+                    if (existing.size() > 1) {
+                        playerItemRepository.deleteAll(existing.subList(1, existing.size()));
+                    }
+                } else {
+                    PlayerItemEntity newItem = new PlayerItemEntity();
+                    newItem.setPlayer(playerEntity);
+                    newItem.setItem(itemEntity);
+                    newItem.setAmount(1);
+                    newItem.setRefineLevel(0);
+                    newItem.setEquipped(false);
+                    playerItemRepository.save(newItem);
+                }
                 log.append("[").append(itemDomain.getName()).append("] ");
             }
             log.append("\n");
@@ -138,7 +153,8 @@ public class BattleService {
         playerEntity.setHpCurrent(playerDomain.getHpCurrent());
         playerEntity.setSpCurrent(playerDomain.getSpCurrent());
 
-        // O save no final do método transacional (realizarAtaque) vai persistir tudo
+        // Persiste todos os dados de XP, level e pontos acumulados
+        playerRepository.save(playerEntity);
 
         return log.toString();
     }

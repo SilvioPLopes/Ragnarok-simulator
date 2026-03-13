@@ -49,6 +49,9 @@ com.ragnarok
 | `monster_drops` | `monster_drops.sql` | 12544 drops de `db/re/mob_db.yml` com rate 1-10000 |
 | `players` | MockMapLoader (startup) | Jogador ID=1 "Hero" |
 | `player_items` | Gerado em combate | Inventário do jogador |
+| `skills` | SQL manual / seed | Catálogo de skills (aegis_name, name, type) |
+| `skill_tree` | SQL manual / seed | Árvore de skills por classe (job_class, skill_id, max_level, prereqs) |
+| `player_skills` | JPA ddl-auto / combate | Skills aprendidas pelo player (player_id, skill_id, current_level) |
 | `monster_spawns` | MockMapLoader (startup) | Legado — substituído por `map_monsters` |
 
 ### Rodando migrações SQL
@@ -115,6 +118,18 @@ Main game loop with two states: exploration and battle.
 4. Ver Status
 5. Sair
 
+**Status menu (`renderStatusMenu`):**
+- Shows full player stats (STR/AGI/VIT/INT/DEX/LUK + derived stats)
+- Inputs 1-6 distribute `statPoints` into the chosen stat
+- Input `S` opens the Skills menu (`renderSkillsMenu`)
+- Input `C` opens the Class Change menu (`renderClassChangeMenu`)
+
+**Skills menu (`renderSkillsMenu`):**
+- Lists all skills available for player's `jobClass` from `skill_tree`
+- Shows current level, max level and status: `[DISPONIVEL]`, `[BLOQUEADA]`, `[APRENDIDA]`, `[MAX]`
+- Selecting a DISPONIVEL skill calls `SkillService.aprenderSkill` — increments level and deducts 1 `skillPoints`
+- Prerequisite violations and "Sem Skill Points" reported via `IllegalStateException` caught and displayed
+
 **Battle menu:**
 - Shows player HP and monster HP each turn
 - Attack calls `BattleService.realizarAtaque`
@@ -124,20 +139,34 @@ Main game loop with two states: exploration and battle.
 
 ## Data Importers (Startup)
 
-`RathenaImporter` runs at `@Order(1)` on startup:
+Startup runs in order — no manual Python scripts needed.
+
+**`@Order(1)` — `RathenaImporter`:**
 - Downloads and parses `db/re/mob_db.yml` → saves to `monsters` (skips if count > 0)
 - Downloads and parses `db/re/item_db_*.yml` → saves to `items` (skips if count > 0)
 
-`MockMapLoader` runs at `@Order(2)` on startup:
-- Creates player ID=1 "Hero" if not exists
-- Creates map `prt_fild08` and spawns Poring/Pupa if not exists
-- Sets `player.mapName = "prontera"` on creation
+**`@Order(2)` — `MockMapLoader`:**
+- Creates player ID=1 "Hero" if not exists (sets all base fields, `mapName = "prontera"`)
+- Patches null fields on existing player (safe for old saves)
+- Does NOT create maps, monsters, or spawns — all real data comes from SQL files
+
+**`@Order(3)` — `StartupDataLoader`:**
+- Ensures UNIQUE constraints exist on `map_monsters`, `monster_drops`, `skill_tree` (idempotent `ALTER TABLE IF NOT EXISTS`)
+- Populates each table from `src/main/resources/db/*.sql` if empty:
+  - `maps` ← `maps.sql`
+  - `map_portals` ← `map_portals_v2.sql`
+  - `map_monsters` ← `map_monsters.sql`
+  - `monster_drops` ← `monster_drops.sql`
+  - `skill_tree` ← `skill_tree.sql`
+- Each load is idempotent: skips if table already has rows
 
 **SnakeYAML limit:** Both `MobDbParser` and `ItemDbParser` set `CodePointLimit` to 50MB to handle large rAthena YAML files:
 ```java
 LoaderOptions options = new LoaderOptions();
 options.setCodePointLimit(50 * 1024 * 1024);
 ```
+
+**Python scripts in `scriptsPython/`** são usados apenas para regenerar os SQLs quando os dados do rAthena mudam. Após regerar, copiar para `src/main/resources/db/`.
 
 ## Python ETL Scripts (`scriptsPython/`)
 
@@ -166,11 +195,47 @@ options.setCodePointLimit(50 * 1024 * 1024);
 ./mvnw test -Dtest=BattleIntegrationTest
 ```
 
+## Skills System
+
+**Entities:** `SkillEntity` → `skills` table, `SkillTreeEntity` → `skill_tree` (read-only), `PlayerSkillEntity` → `player_skills` (JPA creates via ddl-auto).
+
+**Repositories:**
+- `SkillRepository` — `findByAegisName(String)`
+- `SkillTreeRepository` — `findByJobClassIgnoreCase(String)`, `findByJobClassIgnoreCaseAndSkillId(String, String)`, `findDistinctJobClasses()`
+- `PlayerSkillRepository` — `findByPlayerId(Long)`, `findByPlayerIdAndSkillId(Long, String)`
+
+**Application layer:**
+- `SkillRowDTO` — public record used by terminal: `aegisName`, `name`, `maxLevel`, `currentLevel`, `canLearn`, `blockedReason`
+- `SkillService.listarSkillsDoPlayer(Long)` — groups skill_tree rows by skillId, resolves prereqs (AND-logic), returns sorted list
+- `SkillService.aprenderSkill(Long, String)` — validates class, prereqs, max level, skillPoints; upserts `PlayerSkillEntity`; throws `IllegalStateException` on violations
+
+**Prereq logic:** Each skill may have multiple rows in `skill_tree` (one per prereq). All prereqs must be satisfied (AND). Prereqs are looked up from `playerSkillLevels` map, not filtered by job_class.
+
+**Terminal access:** Status menu → `S` → `renderSkillsMenu()` in `RagnarokTerminalRunner`.
+
+## Class Change System
+
+**Domain model:** `JobClass` enum carries `tier` (0–4), `parentClass` (nullable), `descricao`, base stats. Key methods:
+- `maxJobLevel()` — returns 9 for tier 0, 50 for all others
+- `nextClasses()` — returns all `JobClass` values whose `parentClass == this`
+
+**Class progression rules:**
+- `NOVICE` (tier 0) → any tier-1 class present in `skill_tree` (requires jobLevel ≥ 9)
+- Tier-1 classes → their `nextClasses()` present in `skill_tree` (requires jobLevel ≥ 40)
+- Tier ≥ 2 and special classes (`SUPER_NOVICE`, `SUMMONER`) cannot change class
+
+**Application layer:**
+- `ClassChangeService.listarClassesDisponiveis(Long playerId)` — returns available target classes; returns empty list if no progression is available without hitting the DB unnecessarily
+- `ClassChangeService.trocarClasse(Long playerId, JobClass novaClasse)` — validates tier, target class, job level; sets `jobClass = novaClasse`, `jobLevel = 1`, `jobExp = 0`; preserves `skillPoints`; throws `IllegalStateException` (PT-BR message) on violations
+
+**DB dependency:** Both methods call `SkillTreeRepository.findDistinctJobClasses()` to filter classes that actually have data in `skill_tree`.
+
+**Terminal access:** Status menu → `C` → `renderClassChangeMenu()` in `RagnarokTerminalRunner`.
+
 ## Roadmap (Next Priorities)
 
-1. **Stat distribution menu** — Terminal UI to spend `statPoints`
-2. **Skills system** — `Skill`, `PlayerSkill` entities, `skillPoints` spending
-3. **Elemental damage** — element + size modifiers in `BattleEngine`
-4. **Map state persistence** — save player X,Y position
-5. **NPC shop system** — buy/sell with Zenny
-6. **World border connections** — fields connected by border (not NPC warps) are not yet in `map_portals`
+1. **Elemental damage** — element + size modifiers in `BattleEngine`
+2. **Map state persistence** — save player X,Y position
+3. **NPC shop system** — buy/sell with Zenny
+4. **World border connections** — fields connected by border (not NPC warps) are not yet in `map_portals`
+5. **Skills in battle** — integrate learned skills into `BattleEngine` (magic/special damage)

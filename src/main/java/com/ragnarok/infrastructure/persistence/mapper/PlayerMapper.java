@@ -26,7 +26,7 @@ public class PlayerMapper {
         Player player = new Player();
         player.setId(entity.getId());
         player.setName(entity.getName());
-        player.setJobClass(entity.getJobClass());
+        player.setJobClass(entity.getJobClass() != null ? entity.getJobClass().toUpperCase() : null);
         player.setGender(entity.getGender());
 
         player.setBaseLevel(entity.getBaseLevel() != null ? entity.getBaseLevel() : 1);
@@ -37,6 +37,8 @@ public class PlayerMapper {
 
         player.setHpCurrent(entity.getHpCurrent() != null ? entity.getHpCurrent() : 0);
         player.setSpCurrent(entity.getSpCurrent() != null ? entity.getSpCurrent() : 0);
+        player.setStatPoints(entity.getStatPoints() != null ? entity.getStatPoints() : 0);
+        player.setSkillPoints(entity.getSkillPoints() != null ? entity.getSkillPoints() : 0);
 
         // Stats
         PlayerStats stats = new PlayerStats();

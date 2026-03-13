@@ -42,6 +42,9 @@ public class ItemEntity {
     private Integer bonusDex;
     private Integer bonusLuk;
 
+    @Column(name = "bonus_sp")
+    private Integer bonusSp;
+
     @Column(name = "range_val")
     private Integer range;
     private Integer slots;
@@ -65,7 +68,7 @@ public class ItemEntity {
 
         statsObj.setAttack(this.attack);
         statsObj.setDefense(this.defense);
-        statsObj.setMAttack(this.magicAttack);;
+        statsObj.setMAttack(this.magicAttack);
         statsObj.setRange(this.range);
         statsObj.setSlots(this.slots);
         statsObj.setLevelMin(this.levelMin);
@@ -78,6 +81,7 @@ public class ItemEntity {
         statsObj.setBonusInt(this.bonusInt);
         statsObj.setBonusDex(this.bonusDex);
         statsObj.setBonusLuk(this.bonusLuk);
+        statsObj.setBonusSP(this.bonusSp);
 
         return statsObj;
     }

@@ -1,5 +1,6 @@
 package com.ragnarok.domain.service;
 
+import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.domain.model.Player;
 import org.springframework.stereotype.Service;
 
@@ -18,43 +19,58 @@ public class LevelingService {
     public String processarExperiencia(Player player, long gainedBaseExp, long gainedJobExp) {
         StringBuilder log = new StringBuilder();
 
-        // 1. Adiciona EXP Base
-        player.setBaseExp(player.getBaseExp() + gainedBaseExp);
-        log.append(String.format(" (+%d Base XP)", gainedBaseExp));
+        // Resolve JobClass para obter os caps de nível
+        JobClass jobClass;
+        try {
+            jobClass = JobClass.valueOf(player.getJobClass());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new IllegalStateException("JobClass inválida ou não definida: " + player.getJobClass());
+        }
+        int maxJobLevel = jobClass.maxJobLevel();
 
-        // 2. Verifica Level Up Base (While para caso ganhe muita XP e upe vários níveis)
-        while (player.getBaseExp() >= calculateRequiredBaseExp(player.getBaseLevel())) {
-            long req = calculateRequiredBaseExp(player.getBaseLevel());
-            player.setBaseExp(player.getBaseExp() - req);
-            player.setBaseLevel(player.getBaseLevel() + 1);
+        // 1. Base EXP — não adiciona se já no cap 99
+        if (player.getBaseLevel() >= 99) {
+            log.append(" (base nível máximo atingido)");
+        } else {
+            player.setBaseExp(player.getBaseExp() + gainedBaseExp);
+            log.append(String.format(" (+%d Base XP)", gainedBaseExp));
 
-            // Recompensa: +5 Pontos de Atributo por nível (Padrão Ragnarok)
-            int currentPoints = player.getStatPoints() != null ? player.getStatPoints() : 0;
-            player.setStatPoints(currentPoints + 5);
+            while (player.getBaseLevel() < 99
+                    && player.getBaseExp() >= calculateRequiredBaseExp(player.getBaseLevel())) {
+                long req = calculateRequiredBaseExp(player.getBaseLevel());
+                player.setBaseExp(player.getBaseExp() - req);
+                player.setBaseLevel(player.getBaseLevel() + 1);
 
-            log.append("\n🎉 LEVEL UP! Nível Base ").append(player.getBaseLevel()).append(" alcançado!");
-            log.append(" (+5 Pontos de Status)");
+                int currentPoints = player.getStatPoints() != null ? player.getStatPoints() : 0;
+                player.setStatPoints(currentPoints + 5);
 
-            player.setHpCurrent(player.getStats().getMaxHp());
-            player.setSpCurrent(player.getStats().getMaxSp());
+                log.append("\n🎉 LEVEL UP! Nível Base ").append(player.getBaseLevel()).append(" alcançado!");
+                log.append(" (+5 Pontos de Status)");
+
+                player.setHpCurrent(player.getStats().getMaxHp());
+                player.setSpCurrent(player.getStats().getMaxSp());
+            }
         }
 
-        // 3. Adiciona EXP Job
-        player.setJobExp(player.getJobExp() + gainedJobExp);
-        log.append(String.format(" (+%d Job XP)", gainedJobExp));
+        // 2. Job EXP — não adiciona se já no cap da classe
+        if (player.getJobLevel() >= maxJobLevel) {
+            log.append(" (job nível máximo atingido)");
+        } else {
+            player.setJobExp(player.getJobExp() + gainedJobExp);
+            log.append(String.format(" (+%d Job XP)", gainedJobExp));
 
-        // 4. Verifica Level Up Job
-        while (player.getJobExp() >= calculateRequiredJobExp(player.getJobLevel())) {
-            long req = calculateRequiredJobExp(player.getJobLevel());
-            player.setJobExp(player.getJobExp() - req);
-            player.setJobLevel(player.getJobLevel() + 1);
+            while (player.getJobLevel() < maxJobLevel
+                    && player.getJobExp() >= calculateRequiredJobExp(player.getJobLevel())) {
+                long req = calculateRequiredJobExp(player.getJobLevel());
+                player.setJobExp(player.getJobExp() - req);
+                player.setJobLevel(player.getJobLevel() + 1);
 
-            // Recompensa: +1 Ponto de Skill
-            int currentSkillPoints = player.getSkillPoints() != null ? player.getSkillPoints() : 0;
-            player.setSkillPoints(currentSkillPoints + 1);
+                int currentSkillPoints = player.getSkillPoints() != null ? player.getSkillPoints() : 0;
+                player.setSkillPoints(currentSkillPoints + 1);
 
-            log.append("\n🌟 JOB UP! Nível de Classe ").append(player.getJobLevel()).append(" alcançado!");
-            log.append(" (+1 Ponto de Habilidade)");
+                log.append("\n🌟 JOB UP! Nível de Classe ").append(player.getJobLevel()).append(" alcançado!");
+                log.append(" (+1 Ponto de Habilidade)");
+            }
         }
 
         return log.toString();

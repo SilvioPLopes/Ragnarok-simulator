@@ -44,7 +44,7 @@ class BattleLootIntegrationTest {
         // --- 2. SETUP: ITEM RARO (O DROP) ---
         System.out.println("2. Criando Item de Drop (Carta Poring)...");
         ItemEntity card = new ItemEntity();
-        card.setId(4001L); // ID Manual
+        card.setId(99901L); // ID de teste — não conflita com dados reais do rAthena
         card.setName("Poring Card");
         card.setType(ItemType.CARD);
         card.setWeight(1);
@@ -53,7 +53,7 @@ class BattleLootIntegrationTest {
         // --- 3. SETUP: MONSTRO COM DROP CONFIGURADO ---
         System.out.println("3. Criando Monstro com Drop...");
         MonsterEntity poring = new MonsterEntity();
-        poring.setId(1002L);
+        poring.setId(99902L); // ID de teste — não conflita com dados reais do rAthena
         poring.setName("Rich Poring");
         poring.setHp(10); // Pouco HP para morrer rápido
         poring.setDef(0);
@@ -80,9 +80,9 @@ class BattleLootIntegrationTest {
         MonsterEntity monstroMorto = monsterRepository.findById(poring.getId()).orElseThrow();
         assertEquals(0, monstroMorto.getHp(), "O monstro deveria estar com 0 HP.");
 
-        // B. Verifica se o Log informou a morte e o drop
-        assertTrue(log.contains("morreu"), "Log deve confirmar a morte.");
-        assertTrue(log.contains("DROP: Poring Card"), "Log deve confirmar o drop.");
+        // B. Verifica se o Log informou a vitória e o drop
+        assertTrue(log.contains("VITÓRIA") || log.contains("VITORIA"), "Log deve confirmar a vitória.");
+        assertTrue(log.contains("Poring Card"), "Log deve confirmar o drop.");
 
         // C. VERIFICAÇÃO FINAL: O Item está no inventário do Player?
         List<PlayerItemEntity> inventario = playerItemRepository.findByPlayerId(player.getId());

@@ -31,7 +31,7 @@ class MonsterDropIntegrationTest {
     void deveGerenciarDropsDoMonstro() {
         // --- 1. SETUP: Criar o Item (O que vai cair) ---
         ItemEntity jellopy = new ItemEntity();
-        jellopy.setId(909L); // ID clássico do Jellopy
+        jellopy.setId(99904L); // ID de teste — não conflita com dados reais do rAthena
         jellopy.setName("Jellopy");
         jellopy.setType(ItemType.ETC);
         jellopy.setWeight(1);
@@ -39,7 +39,7 @@ class MonsterDropIntegrationTest {
 
         // --- 2. SETUP: Criar o Monstro (Quem vai dropar) ---
         MonsterEntity poring = new MonsterEntity();
-        poring.setId(1002L); // ID clássico do Poring
+        poring.setId(99903L); // ID de teste — não conflita com dados reais do rAthena
         poring.setName("Poring");
         poring.setHp(50);
 
@@ -69,7 +69,7 @@ class MonsterDropIntegrationTest {
 
         // --- 5. VALIDAÇÃO ---
         System.out.println("🔍 Buscando Poring no banco...");
-        MonsterEntity poringCarregado = monsterRepository.findById(1002L).orElseThrow();
+        MonsterEntity poringCarregado = monsterRepository.findById(99903L).orElseThrow();
 
         assertNotNull(poringCarregado.getDrops(), "A lista de drops não deve ser nula");
         assertFalse(poringCarregado.getDrops().isEmpty(), "O Poring deveria ter 1 drop");

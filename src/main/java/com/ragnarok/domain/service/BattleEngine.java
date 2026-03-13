@@ -68,7 +68,7 @@ public class BattleEngine {
         // Fórmula: Ataque do Monstro - (Defesa do Player + Vitalidade)
         int monsterAtk = attacker.getStats() != null ? attacker.getStats().getAttack() : 0;
 
-        int playerDef = (target.getStats() != null && target.getStats().getVit() != null) ? target.getStats().getVit() : 0;
+        int playerDef = target.getTotalDef();
 
         int damage = monsterAtk - playerDef;
         return Math.max(1, damage); // Dano nunca pode ser negativo ou zero

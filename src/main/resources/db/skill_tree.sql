@@ -1897,7 +1897,8 @@ INSERT INTO skill_tree (job_class, skill_id, max_level, prereq_skill, prereq_lev
   ('Shiranui', 'SS_ANKOKURYUUAKUMU', 1, 'SS_KINRYUUHOU', 5),
   ('Shiranui', 'SS_ANKOKURYUUAKUMU', 1, 'SS_ANTENPOU', 5),
   ('Shiranui', 'SS_FOUR_CHARM', 1, 'KO_KAIHOU', 1),
-  ('Shiranui', 'SS_FOUR_CHARM', 1, 'SS_SHINKIROU', 1)
+  ('Shiranui', 'SS_FOUR_CHARM', 1, 'SS_SHINKIROU', 1),
+  ('SWORDSMAN', 'SWORD_MASTERY', 10, NULL, NULL)
 ON CONFLICT (job_class, skill_id, prereq_skill) DO UPDATE SET
     max_level    = EXCLUDED.max_level,
     prereq_level = EXCLUDED.prereq_level;
