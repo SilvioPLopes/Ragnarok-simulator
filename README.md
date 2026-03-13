@@ -14,8 +14,9 @@ Este projeto é o núcleo (Core) de um sistema de emulação e gerenciamento de 
 - **Sistema de Nível:** Gestão de Experiência (Base/Job), Level Up automático e pontos de atributos.
 - **Distribuição de Stats:** Menu terminal para gastar `statPoints` nos atributos (STR/AGI/VIT/INT/DEX/LUK).
 - **Sistema de Skills:** Catálogo de skills por classe (`skill_tree`), prerequisites AND-logic, aprendizado com `skillPoints`, menu terminal acessível via `S` no status.
-- **ETL Pipeline:** Scripts Python em `scriptsPython/` para importar dados do rAthena para o banco.
-- **Testes:** Testes de integração cobrindo o ciclo "Atacar -> Matar -> Dropar -> Upar" e o sistema de skills.
+- **Sistema de Troca de Classe:** Progressão NOVICE→Tier1→Tier2 com validação de job level, menu via `C` no status.
+- **Startup Automático:** `StartupDataLoader` popula todas as tabelas estáticas no boot — sem scripts manuais.
+- **Testes:** Testes de integração cobrindo o ciclo "Atacar -> Matar -> Dropar -> Upar", skills e troca de classe.
 
 ---
 
@@ -47,7 +48,8 @@ O projeto segue estritamente a separação de responsabilidades definida pela ar
 ### 4. Runner (`com.ragnarok.runner`)
 * `RagnarokTerminalRunner` — UI do terminal, game loop de exploração e combate.
 * `RathenaImporter` — importa monstros e itens do rAthena automaticamente no startup (`@Order(1)`).
-* `MockMapLoader` — cria o player inicial e popula dados básicos (`@Order(2)`).
+* `MockMapLoader` — cria o player inicial (`@Order(2)`). Não cria mais mocks de monstros ou mapas.
+* `StartupDataLoader` — popula `maps`, `map_portals`, `map_monsters`, `monster_drops` e `skill_tree` a partir dos SQLs em `src/main/resources/db/` se as tabelas estiverem vazias (`@Order(3)`). **Sem scripts manuais necessários.**
 
 ### 5. "Battle System" (Ciclo de Batalha e Recompensa)
 1. **Trigger:** `BattleService.realizarAtaque` é chamado.
@@ -93,15 +95,16 @@ Poring aparece com probabilidade proporcional ao seu amount.
 | `player_skills` | JPA ddl-auto | Skills aprendidas (player_id, skill_id, current_level) — auto-criada no startup |
 | `monster_spawns` | MockMapLoader (startup) | Legado — substituído por `map_monsters` |
 
-### Rodando migrações
+### Migrações automáticas
 
-```bash
-cd scriptsPython
-pip install psycopg2-binary --break-system-packages
-python3 Migrate.py
+**Nenhum script manual necessário.** O `StartupDataLoader` (@Order 3) popula todas as tabelas automaticamente no startup se estiverem vazias. O console exibirá o progresso:
+
+```
+🔄 Populando map_monsters    a partir de db/map_monsters.sql...
+✅ map_monsters    populada com 2374 registros.
 ```
 
-> ⚠️ Sempre usar `map_portals_v2.sql` — nunca o `map_portals.sql` original (incompleto).
+> Os SQLs ficam em `src/main/resources/db/`. Os scripts Python em `scriptsPython/` são usados apenas para **regenerar** os SQLs quando os dados do rAthena mudam — após regen, copiar para `src/main/resources/db/`.
 
 ### Reset completo do banco (respeitar ordem de FK)
 
@@ -358,22 +361,49 @@ O projeto mantém uma bateria de testes de integração focados nos fluxos crít
 
 ## 🚀 Roadmap & Backlog
 
-O foco atual é fechar o ciclo de progressão do jogador e aumentar a complexidade do combate.
-
-### ✅ Concluído (Features Implementadas)
+### ✅ Concluído
 * **Menu de Distribuição de Stats:** Terminal permite gastar `statPoints` nos 6 atributos base.
-* **Sistema de Skills:** Entidades `skill_tree`/`player_skills`, `SkillService` com listagem e aprendizado, menu terminal via `S` no status.
+* **Sistema de Skills:** `skill_tree`/`player_skills`, SkillService com listagem e aprendizado, menu terminal via `S`.
+* **Sistema de Troca de Classe:** `ClassChangeService`, progressão NOVICE→tier1→tier2, menu terminal via `C` no status.
+* **Startup automático:** `StartupDataLoader` popula todas as tabelas na inicialização — zero scripts manuais.
+* **LevelingService:** Caps de nível base/job por classe.
 
-### Prioridade Alta (Próxima Sprint)
-1. **Skills na Engine de Batalha:** Integrar skills aprendidas na `BattleEngine` (dano mágico, habilidades especiais).
-2. **Refatoração Elementar:** Considerar elementos (Fogo x Água) e tamanhos (Pequeno/Médio/Grande) no cálculo de dano.
-3. **Seed de Skills:** Popular as tabelas `skills` e `skill_tree` com dados reais do rAthena via script Python ou SQL.
+---
 
-### Futuro
-* **Persistência de Estado do Mapa:** Salvar a posição (X,Y) do jogador ao sair.
-* **Sistema de Lojas (NPCs):** Compra e venda de itens com Zenny.
-* **Conexões de borda entre mapas:** Campos conectados por borda (sem NPC warp) ainda não estão no `map_portals`.
-* **Multiplayer (WebSockets):** (Longo Prazo) Permitir interação entre jogadores.
+### 🐛 Bugs Conhecidos
+
+| # | Bug | Descrição |
+|---|-----|-----------|
+| B1 | **Inventário não empilha** | Dropar dois Blue Herb cria dois slots separados em vez de empilhar (`amount += 1`). Itens iguais deveriam ser somados no mesmo slot. |
+| B2 | **Stat points somem ao upar dois níveis seguidos** | Ao ganhar dois level ups no mesmo combate, os pontos de atributo do segundo nível não aparecem no menu. Provável bug de leitura stale do banco entre level ups. |
+| B3 | **Espadachim ausente no menu de troca de classe** | `SWORDSMAN` está no `JobClass` enum mas pode estar ausente no `skill_tree` do banco, fazendo `listarClassesDisponiveis` filtrá-lo para fora. |
+
+---
+
+### 🎮 Funcionalidades Faltando (Backlog)
+
+#### Alta Prioridade
+1. **Usar itens em batalha** — menu de combate só tem "Atacar" e "Fugir". Adicionar opção "Item" para usar consumíveis do inventário durante o combate.
+2. **Usar skills em batalha** — integrar skills aprendidas na `BattleEngine`. Dano mágico (INT), habilidades especiais com custo de SP.
+3. **Itens de retorno (Butterfly Wing / Fly Wing)** — implementar mecânica de teleporte: Butterfly Wing → Prontera, Fly Wing → ponto aleatório do mapa atual.
+4. **Mecânicas dos stats faltantes:**
+   - **AGI** → FLEE (evasão de ataques) e ASPD (velocidade de ataque)
+   - **DEX** → HIT (precisão) e redução de cast time de magias
+   - **LUK** → taxa de crítico e bônus de drop rate
+
+#### Média Prioridade
+5. **Enciclopédia de mapas** — menu informativo mostrando: mapas vizinhos acessíveis, monstros do mapa atual com taxa de spawn, drops de cada monstro com raridade.
+6. **Sistema de lojas NPC** — compra e venda de itens com Zenny em cidades específicas (Prontera, Morroc, etc.).
+7. **Troca de classe restrita a NPCs** — atualmente disponível em qualquer lugar. Deveria ser permitida apenas em cidades/NPCs específicos (ex: Prontera para tier 1, locais específicos para tier 2).
+
+#### Experiência / UX
+8. **Terminal com limpeza de tela** — usar `cls`/`clear` (ou códigos ANSI) entre cada menu para dar sensação de jogo real em vez de scroll infinito no terminal da IDE.
+9. **Dano mágico testável** — INT não tem mecânica visível ainda. Implementar e documentar a fórmula.
+
+#### Futuro
+* **Persistência de posição (X,Y)** — salvar coordenadas ao sair, não apenas o mapa.
+* **Conexões de borda entre mapas** — campos conectados por borda geográfica (sem NPC warp) ausentes do `map_portals`.
+* **Multiplayer (WebSockets)** — (Longo Prazo).
 
 ---
 
