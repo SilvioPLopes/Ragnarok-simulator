@@ -122,6 +122,7 @@ Main game loop with two states: exploration and battle.
 - Shows full player stats (STR/AGI/VIT/INT/DEX/LUK + derived stats)
 - Inputs 1-6 distribute `statPoints` into the chosen stat
 - Input `S` opens the Skills menu (`renderSkillsMenu`)
+- Input `C` opens the Class Change menu (`renderClassChangeMenu`)
 
 **Skills menu (`renderSkillsMenu`):**
 - Lists all skills available for player's `jobClass` from `skill_tree`
@@ -138,20 +139,34 @@ Main game loop with two states: exploration and battle.
 
 ## Data Importers (Startup)
 
-`RathenaImporter` runs at `@Order(1)` on startup:
+Startup runs in order — no manual Python scripts needed.
+
+**`@Order(1)` — `RathenaImporter`:**
 - Downloads and parses `db/re/mob_db.yml` → saves to `monsters` (skips if count > 0)
 - Downloads and parses `db/re/item_db_*.yml` → saves to `items` (skips if count > 0)
 
-`MockMapLoader` runs at `@Order(2)` on startup:
-- Creates player ID=1 "Hero" if not exists
-- Creates map `prt_fild08` and spawns Poring/Pupa if not exists
-- Sets `player.mapName = "prontera"` on creation
+**`@Order(2)` — `MockMapLoader`:**
+- Creates player ID=1 "Hero" if not exists (sets all base fields, `mapName = "prontera"`)
+- Patches null fields on existing player (safe for old saves)
+- Does NOT create maps, monsters, or spawns — all real data comes from SQL files
+
+**`@Order(3)` — `StartupDataLoader`:**
+- Ensures UNIQUE constraints exist on `map_monsters`, `monster_drops`, `skill_tree` (idempotent `ALTER TABLE IF NOT EXISTS`)
+- Populates each table from `src/main/resources/db/*.sql` if empty:
+  - `maps` ← `maps.sql`
+  - `map_portals` ← `map_portals_v2.sql`
+  - `map_monsters` ← `map_monsters.sql`
+  - `monster_drops` ← `monster_drops.sql`
+  - `skill_tree` ← `skill_tree.sql`
+- Each load is idempotent: skips if table already has rows
 
 **SnakeYAML limit:** Both `MobDbParser` and `ItemDbParser` set `CodePointLimit` to 50MB to handle large rAthena YAML files:
 ```java
 LoaderOptions options = new LoaderOptions();
 options.setCodePointLimit(50 * 1024 * 1024);
 ```
+
+**Python scripts in `scriptsPython/`** são usados apenas para regenerar os SQLs quando os dados do rAthena mudam. Após regerar, copiar para `src/main/resources/db/`.
 
 ## Python ETL Scripts (`scriptsPython/`)
 
@@ -186,7 +201,7 @@ options.setCodePointLimit(50 * 1024 * 1024);
 
 **Repositories:**
 - `SkillRepository` — `findByAegisName(String)`
-- `SkillTreeRepository` — `findByJobClassIgnoreCase(String)`, `findByJobClassIgnoreCaseAndSkillId(String, String)`
+- `SkillTreeRepository` — `findByJobClassIgnoreCase(String)`, `findByJobClassIgnoreCaseAndSkillId(String, String)`, `findDistinctJobClasses()`
 - `PlayerSkillRepository` — `findByPlayerId(Long)`, `findByPlayerIdAndSkillId(Long, String)`
 
 **Application layer:**
@@ -197,6 +212,25 @@ options.setCodePointLimit(50 * 1024 * 1024);
 **Prereq logic:** Each skill may have multiple rows in `skill_tree` (one per prereq). All prereqs must be satisfied (AND). Prereqs are looked up from `playerSkillLevels` map, not filtered by job_class.
 
 **Terminal access:** Status menu → `S` → `renderSkillsMenu()` in `RagnarokTerminalRunner`.
+
+## Class Change System
+
+**Domain model:** `JobClass` enum carries `tier` (0–4), `parentClass` (nullable), `descricao`, base stats. Key methods:
+- `maxJobLevel()` — returns 9 for tier 0, 50 for all others
+- `nextClasses()` — returns all `JobClass` values whose `parentClass == this`
+
+**Class progression rules:**
+- `NOVICE` (tier 0) → any tier-1 class present in `skill_tree` (requires jobLevel ≥ 9)
+- Tier-1 classes → their `nextClasses()` present in `skill_tree` (requires jobLevel ≥ 40)
+- Tier ≥ 2 and special classes (`SUPER_NOVICE`, `SUMMONER`) cannot change class
+
+**Application layer:**
+- `ClassChangeService.listarClassesDisponiveis(Long playerId)` — returns available target classes; returns empty list if no progression is available without hitting the DB unnecessarily
+- `ClassChangeService.trocarClasse(Long playerId, JobClass novaClasse)` — validates tier, target class, job level; sets `jobClass = novaClasse`, `jobLevel = 1`, `jobExp = 0`; preserves `skillPoints`; throws `IllegalStateException` (PT-BR message) on violations
+
+**DB dependency:** Both methods call `SkillTreeRepository.findDistinctJobClasses()` to filter classes that actually have data in `skill_tree`.
+
+**Terminal access:** Status menu → `C` → `renderClassChangeMenu()` in `RagnarokTerminalRunner`.
 
 ## Roadmap (Next Priorities)
 

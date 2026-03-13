@@ -1,10 +1,12 @@
 package com.ragnarok.runner;
 
 import com.ragnarok.application.service.BattleService;
+import com.ragnarok.application.service.ClassChangeService;
 import com.ragnarok.application.service.ItemService;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.application.service.SkillRowDTO;
 import com.ragnarok.application.service.SkillService;
+import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
@@ -28,6 +30,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     private final PlayerMapper playerMapper;
     private final MapPortalRepository portalRepo;
     private final SkillService skillService;
+    private final ClassChangeService classChangeService;
 
     private final Scanner scanner = new Scanner(System.in);
     private final Random rng = new Random();
@@ -40,17 +43,18 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
                                   PlayerRepository pr, PlayerItemRepository pir,
                                   MapMonsterRepository mmr, MonsterRepository mr,
                                   PlayerMapper pm, MapPortalRepository portalRepo,
-                                  SkillService skillService) {
-        this.battleService    = bs;
-        this.playerService    = ps;
-        this.itemService      = is;
-        this.playerRepo       = pr;
-        this.playerItemRepo   = pir;
-        this.mapMonsterRepo   = mmr;
-        this.monsterRepo      = mr;
-        this.playerMapper     = pm;
-        this.portalRepo       = portalRepo;
-        this.skillService     = skillService;
+                                  SkillService skillService, ClassChangeService classChangeService) {
+        this.battleService      = bs;
+        this.playerService      = ps;
+        this.itemService        = is;
+        this.playerRepo         = pr;
+        this.playerItemRepo     = pir;
+        this.mapMonsterRepo     = mmr;
+        this.monsterRepo        = mr;
+        this.playerMapper       = pm;
+        this.portalRepo         = portalRepo;
+        this.skillService       = skillService;
+        this.classChangeService = classChangeService;
     }
 
     @Override
@@ -166,6 +170,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
             }
 
             System.out.println("S. Skills");
+            System.out.println("C. Trocar Classe");
             System.out.println("0. Voltar");
             System.out.print("> ");
 
@@ -175,6 +180,11 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
             if ("S".equalsIgnoreCase(input)) {
                 renderSkillsMenu();
+                continue;
+            }
+
+            if ("C".equalsIgnoreCase(input)) {
+                renderClassChangeMenu();
                 continue;
             }
 
@@ -210,6 +220,51 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
             String[] nomes = {"STR", "AGI", "VIT", "INT", "DEX", "LUK"};
             System.out.println(">>> " + nomes[stat - 1] + " aumentou!");
+        }
+    }
+
+    private void renderClassChangeMenu() {
+        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+        List<JobClass> disponiveis = classChangeService.listarClassesDisponiveis(currentPlayer.getId());
+
+        System.out.println("\n=== TROCAR CLASSE ===");
+        System.out.printf("Classe atual: %s | Job Level: %d%n", p.getJobClass(), p.getJobLevel() != null ? p.getJobLevel() : 0);
+
+        if (disponiveis.isEmpty()) {
+            System.out.println("Nenhuma troca de classe disponivel para sua classe atual.");
+            System.out.println("(Pressione ENTER para voltar)");
+            scanner.nextLine();
+            return;
+        }
+
+        System.out.println();
+        for (int i = 0; i < disponiveis.size(); i++) {
+            JobClass jc = disponiveis.get(i);
+            System.out.printf("%d. %-20s — %s (Tier %d)%n", (i + 1), jc.name(), jc.descricao, jc.tier);
+        }
+        System.out.println("0. Voltar");
+        System.out.print("> ");
+
+        int escolha;
+        try {
+            escolha = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Digite apenas numeros.");
+            return;
+        }
+
+        if (escolha == 0) return;
+        if (escolha < 1 || escolha > disponiveis.size()) {
+            System.out.println("Opcao invalida.");
+            return;
+        }
+
+        JobClass novaClasse = disponiveis.get(escolha - 1);
+        try {
+            classChangeService.trocarClasse(currentPlayer.getId(), novaClasse);
+            System.out.println(">>> Voce agora e um(a) " + novaClasse.name() + "! Job Level resetado para 1.");
+        } catch (IllegalStateException e) {
+            System.out.println(">>> " + e.getMessage());
         }
     }
 

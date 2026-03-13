@@ -26,7 +26,7 @@ public class PlayerMapper {
         Player player = new Player();
         player.setId(entity.getId());
         player.setName(entity.getName());
-        player.setJobClass(entity.getJobClass());
+        player.setJobClass(entity.getJobClass() != null ? entity.getJobClass().toUpperCase() : null);
         player.setGender(entity.getGender());
 
         player.setBaseLevel(entity.getBaseLevel() != null ? entity.getBaseLevel() : 1);

@@ -110,7 +110,7 @@ public class ClassChangeService {
 
     private JobClass resolveJobClass(String jobClassStr) {
         try {
-            return JobClass.valueOf(jobClassStr);
+            return JobClass.valueOf(jobClassStr.toUpperCase());
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new IllegalStateException("JobClass inválida ou não definida: " + jobClassStr);
         }
