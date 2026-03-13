@@ -37,6 +37,8 @@ public class PlayerMapper {
 
         player.setHpCurrent(entity.getHpCurrent() != null ? entity.getHpCurrent() : 0);
         player.setSpCurrent(entity.getSpCurrent() != null ? entity.getSpCurrent() : 0);
+        player.setStatPoints(entity.getStatPoints() != null ? entity.getStatPoints() : 0);
+        player.setSkillPoints(entity.getSkillPoints() != null ? entity.getSkillPoints() : 0);
 
         // Stats
         PlayerStats stats = new PlayerStats();
