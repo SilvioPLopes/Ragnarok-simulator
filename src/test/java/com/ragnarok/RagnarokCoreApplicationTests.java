@@ -8,8 +8,6 @@ import org.springframework.test.context.TestPropertySource;
 @ActiveProfiles("test")
 @SpringBootTest
 @TestPropertySource(properties = {
-        "DB_USER=postgres",
-        "DB_PASSWORD=postgre",
         "spring.jpa.hibernate.ddl-auto=update"
 })
 class RagnarokCoreApplicationTests {

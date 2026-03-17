@@ -11,6 +11,7 @@ target/
 ### Claude AI ###
 .claude/
 CLAUDE.md
+docs/superpowers/
 
 ### Python ###
 __pycache__/

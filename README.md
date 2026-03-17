@@ -78,7 +78,7 @@ Poring aparece com probabilidade proporcional ao seu amount.
 ## 🗄 Banco de Dados
 
 **URL:** `jdbc:postgresql://localhost:5432/ragnarok_db`
-**User:** `postgres` / **Password:** `postgre`
+**User:** `postgres` / **Password:** *(configure via variável de ambiente `DB_PASS`, padrão local: `postgre`)*
 
 | Tabela | Origem | Descrição |
 |---|---|---|

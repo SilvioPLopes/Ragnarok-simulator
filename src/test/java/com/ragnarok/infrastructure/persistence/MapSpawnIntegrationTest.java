@@ -15,8 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 @SpringBootTest
 @TestPropertySource(properties = {
-        "DB_USER=postgres",
-        "DB_PASSWORD=postgre",
         "spring.jpa.hibernate.ddl-auto=update"
 })
 class MapSpawnIntegrationTest {

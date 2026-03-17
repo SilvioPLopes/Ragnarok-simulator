@@ -16,9 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 @SpringBootTest
 @TestPropertySource(properties = {
-        "DB_USER=postgres",
-        "DB_PASSWORD=postgre",
-        "spring.jpa.hibernate.ddl-auto=update" // Recria o banco limpo para o teste
+        "spring.jpa.hibernate.ddl-auto=update"
 })
 class BattleIntegrationTest {
 
