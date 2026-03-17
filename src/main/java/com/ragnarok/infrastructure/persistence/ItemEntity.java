@@ -3,6 +3,7 @@ package com.ragnarok.infrastructure.persistence;
 import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.ItemStats;
 import com.ragnarok.domain.model.ItemType;
+import com.ragnarok.domain.model.WeaponType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -54,6 +55,10 @@ public class ItemEntity {
 
     @Enumerated(EnumType.STRING)
     private EquipSlot equipSlot;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "weapon_type")
+    private WeaponType weaponType;
 
     @Column(name = "script", columnDefinition = "TEXT")
     private String script;

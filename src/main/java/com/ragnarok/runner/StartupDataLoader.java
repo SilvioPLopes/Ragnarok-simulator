@@ -31,6 +31,8 @@ public class StartupDataLoader implements CommandLineRunner {
     public void run(String... args) throws Exception {
         ensureUniqueConstraints();
         forceLoad("db/skills.sql");                                        // ON CONFLICT DO UPDATE — seguro sempre
+        forceLoad("db/skill_effects.sql");                                 // ALTER + UPDATE idempotente
+        forceLoad("db/weapon_size_modifiers.sql");                         // ON CONFLICT DO UPDATE — idempotente
         loadIfEmpty("maps",          "db/maps.sql",            0);
         loadIfEmpty("map_portals",   "db/map_portals_v2.sql",  0);
         loadIfEmpty("map_monsters",  "db/map_monsters.sql",    0);
@@ -50,6 +52,8 @@ public class StartupDataLoader implements CommandLineRunner {
                 "ALTER TABLE monster_drops ADD CONSTRAINT uq_monster_drops_monster_item UNIQUE (monster_id, item_id)");
         addUniqueConstraint("uq_skill_tree_class_skill_prereq",
                 "ALTER TABLE skill_tree ADD CONSTRAINT uq_skill_tree_class_skill_prereq UNIQUE (job_class, skill_id, prereq_skill)");
+        addUniqueConstraint("uq_skill_buff_effects_skill_stat",
+                "ALTER TABLE skill_buff_effects ADD CONSTRAINT uq_skill_buff_effects_skill_stat UNIQUE (skill_id, stat_type)");
     }
 
     private void addUniqueConstraint(String constraintName, String alterSql) {

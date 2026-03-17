@@ -2,6 +2,7 @@ package com.ragnarok.infrastructure.client.mapper;
 
 import com.ragnarok.domain.model.Item;
 import com.ragnarok.domain.model.ItemStats;
+import com.ragnarok.domain.model.WeaponType;
 import com.ragnarok.infrastructure.client.dto.ItemDTO;
 import com.ragnarok.infrastructure.persistence.ItemEntity;
 import org.springframework.stereotype.Component;
@@ -82,6 +83,7 @@ public class ItemMapper {
         // Se precisar do slot, adicione o campo 'EquipSlot' direto na classe Item (Domain), não em Stats.
 
         item.setStats(stats);
+        item.setWeaponType(entity.getWeaponType() != null ? entity.getWeaponType() : WeaponType.NONE);
         item.setDroppedBy(new ArrayList<>());
 
         return item;

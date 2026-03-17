@@ -5,7 +5,7 @@ import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.Item;
 import com.ragnarok.domain.model.ItemStats;
 import com.ragnarok.domain.model.ItemType;
-import com.ragnarok.domain.service.ScriptInterpreter;
+import com.ragnarok.application.service.ScriptInterpreter;
 import com.ragnarok.infrastructure.client.mapper.ItemMapper;
 import com.ragnarok.infrastructure.persistence.*;
 import org.springframework.stereotype.Service;
@@ -22,16 +22,18 @@ public class ItemService {
     private final PlayerRepository playerRepository;
     private final PlayerItemRepository playerItemRepository;
     private final ItemMapper itemMapper;
-    private final ScriptInterpreter scriptInterpreter = new ScriptInterpreter();
+    private final ScriptInterpreter scriptInterpreter;
 
     public ItemService(ItemRepository itemRepository,
                        PlayerRepository playerRepository,
                        PlayerItemRepository playerItemRepository,
-                       ItemMapper itemMapper) {
+                       ItemMapper itemMapper,
+                       ScriptInterpreter scriptInterpreter) {
         this.itemRepository = itemRepository;
         this.playerRepository = playerRepository;
         this.playerItemRepository = playerItemRepository;
         this.itemMapper = itemMapper;
+        this.scriptInterpreter = scriptInterpreter;
     }
 
     public com.ragnarok.domain.model.Item criarItemDeTeste(Long id, String name, int attack) {
@@ -130,7 +132,11 @@ public class ItemService {
             if (!result.supported()) {
                 return "Este item não pode ser usado ainda.";
             }
-            return aplicarCura(player, itemEntity, result.hpHeal(), result.spHeal(), nome);
+            int hpMax = player.getHpMax() != null ? player.getHpMax() : 100;
+            int spMax = player.getSpMax() != null ? player.getSpMax() : 40;
+            int hpHeal = result.isPercent() ? hpMax * result.hpHeal() / 100 : result.hpHeal();
+            int spHeal = result.isPercent() ? spMax * result.spHeal() / 100 : result.spHeal();
+            return aplicarCura(player, itemEntity, hpHeal, spHeal, nome);
         }
 
         // Fallback legado: usa campo efeito (UPDATEs manuais anteriores)

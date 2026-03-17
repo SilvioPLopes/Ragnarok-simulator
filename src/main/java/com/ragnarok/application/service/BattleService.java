@@ -3,6 +3,7 @@ package com.ragnarok.application.service;
 import com.ragnarok.domain.model.*;
 import com.ragnarok.domain.model.Monster;
 import com.ragnarok.domain.model.Player;
+import com.ragnarok.domain.model.WeaponType;
 import com.ragnarok.domain.service.BattleEngine;
 import com.ragnarok.domain.service.LevelingService;
 import com.ragnarok.infrastructure.client.mapper.MonsterMapper;
@@ -24,11 +25,12 @@ public class BattleService {
     private final PlayerRepository playerRepository;
     private final MonsterRepository monsterRepository;
     private final PlayerMapper playerMapper;
-    private final PlayerItemRepository playerItemRepository; // Necessário para salvar o loot
+    private final PlayerItemRepository playerItemRepository;
     private final ItemMapper itemMapper;
     private final MonsterMapper monsterMapper;
     private final BattleEngine battleEngine;
     private final LevelingService levelingService;
+    private final WeaponSizeService weaponSizeService;
 
     public BattleService(PlayerRepository playerRepository,
                          MonsterRepository monsterRepository,
@@ -37,7 +39,8 @@ public class BattleService {
                          ItemMapper itemMapper,
                          MonsterMapper monsterMapper,
                          BattleEngine battleEngine,
-                         LevelingService levelingService) {
+                         LevelingService levelingService,
+                         WeaponSizeService weaponSizeService) {
         this.playerRepository = playerRepository;
         this.monsterRepository = monsterRepository;
         this.playerItemRepository = playerItemRepository;
@@ -46,6 +49,7 @@ public class BattleService {
         this.monsterMapper = monsterMapper;
         this.battleEngine = battleEngine;
         this.levelingService = levelingService;
+        this.weaponSizeService = weaponSizeService;
     }
 
     @Transactional
@@ -63,8 +67,17 @@ public class BattleService {
         Player player = playerMapper.toDomain(playerEntity);
         Monster monster = monsterMapper.toDomain(monsterEntity);
 
-        // 2. Calcular Dano
+        // 2. Calcular Dano base
         int damage = battleEngine.calculateDamage(player, monster);
+
+        // 2a. Aplicar modificador de tamanho da arma
+        WeaponType weaponType = player.getEquipments().stream()
+                .map(i -> i.getItemDefinition() != null ? i.getItemDefinition().getWeaponType() : null)
+                .filter(wt -> wt != null && wt != WeaponType.NONE)
+                .findFirst()
+                .orElse(WeaponType.NONE);
+        int sizeModPct = weaponSizeService.getModifier(weaponType, monster.getSize());
+        damage = battleEngine.applyWeaponSizeModifier(damage, sizeModPct);
 
         // 3. Aplicar Dano no Banco (Turno do Jogador)
         int newHp = Math.max(0, monsterEntity.getHp() - damage);
@@ -81,6 +94,11 @@ public class BattleService {
         int monsterDamage = battleEngine.calculateMonsterDamage(monster, player);
         int playerNewHp = Math.max(0, playerEntity.getHpCurrent() - monsterDamage);
         playerEntity.setHpCurrent(playerNewHp);
+
+        // 6. Decrementar buffs ativos do player (1 turno = 1 ação)
+        player.decrementarBuffs();
+        playerEntity.setActiveBuffsJson(playerMapper.serializeBuffs(player));
+
         playerRepository.save(playerEntity);
 
         if (playerNewHp <= 0) {

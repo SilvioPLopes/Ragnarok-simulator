@@ -69,6 +69,10 @@ public class PlayerEntity {
     private Integer coordY;
 
 
+    // --- Buffs temporários (JSON serializado) ---
+    @Column(name = "active_buffs", columnDefinition = "TEXT")
+    private String activeBuffsJson;
+
     // --- Relacionamento com Inventário ---
 
     @OneToMany(mappedBy = "player", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)

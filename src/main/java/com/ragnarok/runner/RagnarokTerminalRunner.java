@@ -98,7 +98,8 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         System.out.println("2. Portais");
         System.out.println("3. Inventario");
         System.out.println("4. Ver Status");
-        System.out.println("5. Sair");
+        System.out.println("5. Usar Skill");
+        System.out.println("6. Sair");
         System.out.print("> ");
 
         String input = scanner.nextLine();
@@ -106,7 +107,8 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         else if ("2".equals(input)) renderPortaisMenu(mapaAtual);
         else if ("3".equals(input)) renderInventoryMenu();
         else if ("4".equals(input)) renderStatusMenu();
-        else if ("5".equals(input)) System.exit(0);
+        else if ("5".equals(input)) renderOutOfBattleSkillMenu();
+        else if ("6".equals(input)) System.exit(0);
     }
 
     private void renderPortaisMenu(String mapaAtual) {
@@ -386,6 +388,46 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
                 System.out.println(">>> " + e.getMessage());
             }
         }
+    }
+
+    private void renderOutOfBattleSkillMenu() {
+        clearScreen();
+        List<SkillRowDTO> skills = skillService.listarSkillsUsaveisForaDeCombate(currentPlayer.getId());
+
+        System.out.println("\n=== USAR SKILL (Fora de Combate) ===");
+
+        if (skills.isEmpty()) {
+            System.out.println("Nenhuma skill de buff ou cura aprendida.");
+            System.out.println("(Pressione ENTER para voltar)");
+            scanner.nextLine();
+            return;
+        }
+
+        for (int i = 0; i < skills.size(); i++) {
+            SkillRowDTO sk = skills.get(i);
+            System.out.printf("%d. %s (Lv %d)%n", (i + 1), sk.aegisName(), sk.currentLevel());
+        }
+        System.out.println("0. Voltar");
+        System.out.print("> ");
+
+        int escolha;
+        try {
+            escolha = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            return;
+        }
+
+        if (escolha == 0 || escolha < 1 || escolha > skills.size()) return;
+
+        String aegisName = skills.get(escolha - 1).aegisName();
+        try {
+            String resultado = skillService.usarSkillEmCombate(currentPlayer.getId(), aegisName, null);
+            System.out.println(">>> " + resultado);
+        } catch (IllegalStateException e) {
+            System.out.println(">>> " + e.getMessage());
+        }
+        System.out.println("(Pressione ENTER para continuar)");
+        scanner.nextLine();
     }
 
     private void renderBattleMenu() {

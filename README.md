@@ -95,6 +95,21 @@ Poring aparece com probabilidade proporcional ao seu amount.
 | `player_skills` | JPA ddl-auto | Skills aprendidas (player_id, skill_id, current_level) — auto-criada no startup |
 | `monster_spawns` | MockMapLoader (startup) | Legado — substituído por `map_monsters` |
 
+### Resetando dados do banco
+
+Para forçar reimportação com dados atualizados do rAthena:
+
+```sql
+-- Reimportar itens (atualiza campo `script` com dados reais do rAthena):
+DELETE FROM items;
+
+-- Reimportar skills (atualiza `script` — feito automaticamente a cada startup):
+DELETE FROM skills;
+```
+
+> Na próxima inicialização, `RathenaImporter` reimporta `items` automaticamente quando a tabela está vazia.
+> A tabela `skills` é sempre atualizada via `forceLoad` no startup — não precisa de `DELETE` manual.
+
 ### Migrações automáticas
 
 **Nenhum script manual necessário.** O `StartupDataLoader` (@Order 3) popula todas as tabelas automaticamente no startup se estiverem vazias. O console exibirá o progresso:
