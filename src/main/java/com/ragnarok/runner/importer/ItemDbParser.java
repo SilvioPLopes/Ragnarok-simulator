@@ -52,6 +52,9 @@ public class ItemDbParser {
             entity.setWeight(toInt(item.get("Weight")));
             entity.setPrice(toInt(item.get("Buy")));
 
+            String script = (String) item.get("Script");
+            entity.setScript(script);
+
             // EquipSlot — vem como um mapa de localizations (ex: {Head_Top: true})
             Object locations = item.get("Locations");
             if (locations instanceof Map) {

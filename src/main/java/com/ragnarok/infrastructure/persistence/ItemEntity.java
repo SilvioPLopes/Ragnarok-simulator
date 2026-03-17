@@ -55,6 +55,9 @@ public class ItemEntity {
     @Enumerated(EnumType.STRING)
     private EquipSlot equipSlot;
 
+    @Column(name = "script", columnDefinition = "TEXT")
+    private String script;
+
     public Integer getAttack() {
         return attack != null ? attack : 0;
     }

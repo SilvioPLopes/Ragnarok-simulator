@@ -17,4 +17,7 @@ public class SkillEntity {
     private String name;
 
     private String type;
+
+    @Column(columnDefinition = "TEXT")
+    private String script;
 }
