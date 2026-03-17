@@ -30,6 +30,7 @@ public class StartupDataLoader implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         ensureUniqueConstraints();
+        forceLoad("db/skills.sql");                                        // ON CONFLICT DO UPDATE — seguro sempre
         loadIfEmpty("maps",          "db/maps.sql",            0);
         loadIfEmpty("map_portals",   "db/map_portals_v2.sql",  0);
         loadIfEmpty("map_monsters",  "db/map_monsters.sql",    0);
@@ -58,6 +59,20 @@ public class StartupDataLoader implements CommandLineRunner {
         if (Boolean.FALSE.equals(exists)) {
             jdbc.execute(alterSql);
             System.out.println("✅ Constraint criada: " + constraintName);
+        }
+    }
+
+    /**
+     * Executa o SQL sem verificar se a tabela está vazia.
+     * Usado para tabelas com ON CONFLICT DO UPDATE — idempotente por design.
+     */
+    private void forceLoad(String sqlFile) {
+        System.out.printf("🔄 Atualizando via force-load: %s...%n", sqlFile);
+        try (Connection conn = dataSource.getConnection()) {
+            ScriptUtils.executeSqlScript(conn, new ClassPathResource(sqlFile));
+            System.out.printf("✅ %-20s atualizada (force).%n", sqlFile);
+        } catch (Exception e) {
+            System.err.printf("❌ Erro ao carregar %s: %s%n", sqlFile, e.getMessage());
         }
     }
 
