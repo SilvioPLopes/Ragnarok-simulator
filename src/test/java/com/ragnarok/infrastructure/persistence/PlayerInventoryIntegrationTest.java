@@ -2,10 +2,12 @@ package com.ragnarok.infrastructure.persistence;
 
 import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.ItemType;
+import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,18 +23,24 @@ import static org.junit.jupiter.api.Assertions.*;
 })
 class PlayerInventoryIntegrationTest {
 
+    @MockBean
+    @SuppressWarnings("unused")
+    private RagnarokTerminalRunner ragnarokTerminalRunner;
+
     @Autowired private PlayerRepository playerRepository;
     @Autowired private ItemRepository itemRepository;
     @Autowired private PlayerItemRepository playerItemRepository;
 
     @Test
-    @DisplayName("Fluxo Completo: Criar Player -> Receber Ahlspiess -> Equipar -> Validar Status")
+    @DisplayName("Fluxo Completo: Criar Player -> Receber Lança -> Equipar -> Validar Status")
     @Transactional
     void deveGerenciarInventarioEEquipamento() {
-        // 1. CARGA
-        Long ahlspiessId = 1478L;
-        ItemEntity ahlspiessPrototype = itemRepository.findById(ahlspiessId)
-                .orElseThrow(() -> new IllegalStateException("Ahlspiess não encontrada."));
+        // 1. SETUP: Cria item de teste próprio — sem depender de dados pré-existentes
+        ItemEntity ahlspiessPrototype = new ItemEntity();
+        ahlspiessPrototype.setId(99803L);
+        ahlspiessPrototype.setName("Test Lance");
+        ahlspiessPrototype.setAttack(120);
+        ahlspiessPrototype = itemRepository.save(ahlspiessPrototype);
 
         // 2. PLAYER (Salva primeiro para ter ID)
         PlayerEntity player = new PlayerEntity();
@@ -73,8 +81,12 @@ class PlayerInventoryIntegrationTest {
         player.setJobClass("Merchant");
         player = playerRepository.save(player);
 
-        // Cria Item (Protótipo)
-        ItemEntity itemProto = itemRepository.findById(1478L).orElseThrow();
+        // Cria Item de teste próprio — sem depender de dados pré-existentes
+        ItemEntity itemProto = new ItemEntity();
+        itemProto.setId(99804L);
+        itemProto.setName("Test Lance 2");
+        itemProto.setAttack(120);
+        itemProto = itemRepository.save(itemProto);
 
         // Dá o item ao player (Salvando direto no repositório do filho)
         PlayerItemEntity itemDoPlayer = new PlayerItemEntity();

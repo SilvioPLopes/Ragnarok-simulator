@@ -214,4 +214,15 @@ class ClassChangeServiceTest {
         assertThrows(IllegalStateException.class,
                 () -> classChangeService.trocarClasse(1L, JobClass.SWORDSMAN));
     }
+
+    @Test
+    @DisplayName("trocarClasse lança exceção quando jobLevel insuficiente (NOVICE jobLevel 5)")
+    void trocarClasse_jobLevelInsuficiente_lancaExcecao() {
+        // Player NOVICE precisa jobLevel >= 9; jobLevel 5 é insuficiente
+        PlayerEntity p = makePlayer("NOVICE", 5, 0);
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
+
+        assertThrows(IllegalStateException.class,
+                () -> classChangeService.trocarClasse(1L, JobClass.SWORDSMAN));
+    }
 }

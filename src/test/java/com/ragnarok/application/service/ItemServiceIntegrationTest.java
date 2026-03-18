@@ -4,10 +4,12 @@ import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.Item;
 import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.infrastructure.persistence.*;
+import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 @SpringBootTest
 class ItemServiceIntegrationTest {
+
+    @MockBean
+    @SuppressWarnings("unused")
+    private RagnarokTerminalRunner ragnarokTerminalRunner;
 
     @Autowired private ItemService itemService;
     @Autowired private PlayerRepository playerRepository;
@@ -134,6 +140,287 @@ class ItemServiceIntegrationTest {
             itemService.equiparItem(idPlayer, idJellopy);
         });
         System.out.println("✅ Validação de Tipo: Não é possível equipar Jellopy.");
+    }
+
+    @Test
+    @DisplayName("equiparItem lança exceção quando item não é equipamento (CONSUMABLE)")
+    @Transactional
+    void equiparItem_tipoInvalido_lancaExcecao() {
+        // Cria item CONSUMABLE
+        ItemEntity consumable = new ItemEntity();
+        consumable.setId(88801L);
+        consumable.setName("Red Potion");
+        consumable.setType(ItemType.CONSUMABLE);
+        itemRepository.save(consumable);
+
+        PlayerEntity player = playerRepository.findById(1L).orElseThrow();
+        itemService.darItemAoJogador(player.getId(), 88801L, 1);
+
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId())
+                .stream()
+                .filter(pi -> pi.getItem().getId().equals(88801L))
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> itemService.equiparItem(player.getId(), playerItemId));
+    }
+
+    @Test
+    @DisplayName("criarItemDeTeste persiste todos os campos flat corretamente")
+    @Transactional
+    void criarItemDeTeste_verificaFlatteningCompleto() {
+        itemService.criarItemDeTeste(88803L, "TestSword", 100);
+
+        ItemEntity entity = itemRepository.findById(88803L).orElseThrow();
+        assertEquals("TestSword", entity.getName());
+        assertEquals(100, entity.getAttack(), "attack deve ser 100");
+        assertEquals(0, entity.getDefense(), "defense deve ser 0");
+        assertEquals(2, entity.getSlots(), "slots deve ser 2");
+        assertEquals(ItemType.WEAPON, entity.getType(), "type deve ser WEAPON");
+        assertEquals(EquipSlot.HAND_R, entity.getEquipSlot(), "equipSlot deve ser HAND_R");
+    }
+
+    @Test
+    @DisplayName("usarItem com CONSUMABLE (script itemheal) cura HP do player")
+    @Transactional
+    void usarItem_consumable_script_healsHP() {
+        // Cria item consumível com script
+        ItemEntity potion = new ItemEntity();
+        potion.setId(88820L);
+        potion.setName("Red Potion");
+        potion.setType(ItemType.CONSUMABLE);
+        potion.setScript("itemheal 50, 0");
+        itemRepository.save(potion);
+
+        // Cria player com HP parcial
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestHeal");
+        player.setHpCurrent(30);
+        player.setHpMax(100);
+        player.setSpCurrent(20);
+        player.setSpMax(40);
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88820L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        String result = itemService.usarItem(playerItemId);
+
+        assertTrue(result.contains("50 de HP"), "Deve reportar 50 HP curado");
+        PlayerEntity updated = playerRepository.findById(player.getId()).orElseThrow();
+        assertEquals(80, updated.getHpCurrent(), "HP deve ser 80 após cura");
+    }
+
+    @Test
+    @DisplayName("usarItem com CONSUMABLE (script itemheal) e HP cheio retorna mensagem de cheio")
+    @Transactional
+    void usarItem_consumable_hpFull_retornaMensagemCheio() {
+        ItemEntity potion = new ItemEntity();
+        potion.setId(88821L);
+        potion.setName("HP Potion Full");
+        potion.setType(ItemType.CONSUMABLE);
+        potion.setScript("itemheal 50, 0");
+        itemRepository.save(potion);
+
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestFull");
+        player.setHpCurrent(100);
+        player.setHpMax(100);
+        player.setSpCurrent(20);
+        player.setSpMax(40);
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88821L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        String result = itemService.usarItem(playerItemId);
+
+        assertEquals("Seu HP já está cheio!", result);
+    }
+
+    @Test
+    @DisplayName("usarItem com CONSUMABLE (script itemheal) e SP cheio retorna mensagem de cheio")
+    @Transactional
+    void usarItem_consumable_spFull_retornaMensagemCheio() {
+        ItemEntity spPotion = new ItemEntity();
+        spPotion.setId(88822L);
+        spPotion.setName("SP Potion Full");
+        spPotion.setType(ItemType.CONSUMABLE);
+        spPotion.setScript("itemheal 0, 20");
+        itemRepository.save(spPotion);
+
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestSPFull");
+        player.setHpCurrent(50);
+        player.setHpMax(100);
+        player.setSpCurrent(40);
+        player.setSpMax(40);
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88822L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        String result = itemService.usarItem(playerItemId);
+
+        assertEquals("Seu SP já está cheio!", result);
+    }
+
+    @Test
+    @DisplayName("usarItem com CONSUMABLE (script itemheal) cura HP e SP quando ambos parciais")
+    @Transactional
+    void usarItem_consumable_healsHpAndSp() {
+        ItemEntity combo = new ItemEntity();
+        combo.setId(88823L);
+        combo.setName("Combo Potion");
+        combo.setType(ItemType.CONSUMABLE);
+        combo.setScript("itemheal 30, 10");
+        itemRepository.save(combo);
+
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestCombo");
+        player.setHpCurrent(50);
+        player.setHpMax(100);
+        player.setSpCurrent(20);
+        player.setSpMax(40);
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88823L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        String result = itemService.usarItem(playerItemId);
+
+        assertTrue(result.contains("de HP e"), "Deve reportar cura de HP e SP juntos");
+    }
+
+    @Test
+    @DisplayName("usarItem com CONSUMABLE (script itemheal) cura apenas SP")
+    @Transactional
+    void usarItem_consumable_healsSpOnly() {
+        ItemEntity spPotion = new ItemEntity();
+        spPotion.setId(88824L);
+        spPotion.setName("SP Potion");
+        spPotion.setType(ItemType.CONSUMABLE);
+        spPotion.setScript("itemheal 0, 20");
+        itemRepository.save(spPotion);
+
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestSP");
+        player.setHpCurrent(100);
+        player.setHpMax(100);
+        player.setSpCurrent(10);
+        player.setSpMax(40);
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88824L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        String result = itemService.usarItem(playerItemId);
+
+        assertTrue(result.contains("de SP"), "Deve reportar cura de SP");
+    }
+
+    @Test
+    @DisplayName("usarItem com CONSUMABLE e HP+SP ambos cheios retorna mensagem de ambos cheios")
+    @Transactional
+    void usarItem_consumable_ambosCheioss_retornaMensagem() {
+        ItemEntity combo = new ItemEntity();
+        combo.setId(88825L);
+        combo.setName("Full Potion");
+        combo.setType(ItemType.CONSUMABLE);
+        combo.setScript("itemheal 30, 10");
+        itemRepository.save(combo);
+
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestBothFull");
+        player.setHpCurrent(100);
+        player.setHpMax(100);
+        player.setSpCurrent(40);
+        player.setSpMax(40);
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88825L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        String result = itemService.usarItem(playerItemId);
+
+        assertEquals("HP e SP já estão cheios!", result);
+    }
+
+    @Test
+    @DisplayName("usarItem com CONSUMABLE sem script e sem efeito retorna sem efeito")
+    @Transactional
+    void usarItem_consumable_semEfeito_retornaMensagem() {
+        ItemEntity noEffect = new ItemEntity();
+        noEffect.setId(88826L);
+        noEffect.setName("Useless Item");
+        noEffect.setType(ItemType.CONSUMABLE);
+        // sem script, sem efeito, sem bonusSp
+        itemRepository.save(noEffect);
+
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestNoEffect");
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88826L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        String result = itemService.usarItem(playerItemId);
+
+        assertEquals("Este item não tem efeito.", result);
+    }
+
+    @Test
+    @DisplayName("usarItem com CONSUMABLE legacy (efeito HP) cura via campo efeito")
+    @Transactional
+    void usarItem_consumable_legacyEfeito_healsHP() {
+        ItemEntity legacyPotion = new ItemEntity();
+        legacyPotion.setId(88827L);
+        legacyPotion.setName("Legacy HP Potion");
+        legacyPotion.setType(ItemType.CONSUMABLE);
+        legacyPotion.setEfeito(40); // efeito = HP heal
+        // sem script → fallback legado
+        itemRepository.save(legacyPotion);
+
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestLegacy");
+        player.setHpCurrent(20);
+        player.setHpMax(100);
+        player.setSpCurrent(20);
+        player.setSpMax(40);
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88827L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        String result = itemService.usarItem(playerItemId);
+
+        assertTrue(result.contains("40 de HP"), "Deve curar 40 HP via campo efeito");
+    }
+
+    @Test
+    @DisplayName("usarItem desequipa item quando já equipado (unequip path)")
+    @Transactional
+    void usarItem_equippedWeapon_unequips() {
+        createMockItem(88828L, "TestSword", EquipSlot.HAND_R);
+
+        PlayerEntity player = new PlayerEntity();
+        player.setName("TestUnequip");
+        player = playerRepository.save(player);
+
+        itemService.darItemAoJogador(player.getId(), 88828L, 1);
+        UUID playerItemId = playerItemRepository.findByPlayerId(player.getId()).get(0).getId();
+
+        // Equipa primeiro
+        itemService.equiparItem(player.getId(), playerItemId);
+        assertTrue(playerItemRepository.findById(playerItemId).orElseThrow().getEquipped());
+
+        // Usa novamente → deve desequipar
+        String result = itemService.usarItem(playerItemId);
+
+        assertTrue(result.contains("desequipado"), "Deve retornar mensagem de desequipar");
+        assertFalse(playerItemRepository.findById(playerItemId).orElseThrow().getEquipped());
     }
 
     // --- Helper para criar itens no banco rapidamente ---

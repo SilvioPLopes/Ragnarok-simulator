@@ -85,6 +85,82 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals><goal>prepare-agent</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals><goal>report</goal></goals>
+                        <configuration>
+                            <excludes>
+                                <!-- Importer e DTOs externos: sem valor de teste -->
+                                <exclude>com/ragnarok/runner/importer/**</exclude>
+                                <exclude>com/ragnarok/infrastructure/client/dto/**</exclude>
+                                <exclude>com/ragnarok/runner/importer/dto/**</exclude>
+                                <!-- Terminal runner: menus interativos (System.in + loops infinitos) -->
+                                <exclude>com/ragnarok/runner/RagnarokTerminalRunner.class</exclude>
+                                <!-- Startup beans: lógica de inicialização, coberta pelos testes de integração -->
+                                <exclude>com/ragnarok/runner/MockMapLoader.class</exclude>
+                                <exclude>com/ragnarok/runner/StartupDataLoader.class</exclude>
+                                <!-- Enums sem lógica -->
+                                <exclude>com/ragnarok/domain/model/SkillElement.class</exclude>
+                                <exclude>com/ragnarok/domain/model/SkillEffectType.class</exclude>
+                                <!-- JPA entities: getters/setters gerados pelo Lombok -->
+                                <exclude>com/ragnarok/infrastructure/persistence/ItemEntity.class</exclude>
+                                <exclude>com/ragnarok/infrastructure/persistence/MonsterDropEntity.class</exclude>
+                                <exclude>com/ragnarok/infrastructure/persistence/PlayerEntity.class</exclude>
+                                <!-- Spring Boot entry point -->
+                                <exclude>com/ragnarok/RagnarokCoreApplication.class</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <phase>test</phase>
+                        <goals><goal>check</goal></goals>
+                        <configuration>
+                            <excludes>
+                                <exclude>com/ragnarok/runner/importer/**</exclude>
+                                <exclude>com/ragnarok/infrastructure/client/dto/**</exclude>
+                                <exclude>com/ragnarok/runner/importer/dto/**</exclude>
+                                <exclude>com/ragnarok/runner/RagnarokTerminalRunner.class</exclude>
+                                <exclude>com/ragnarok/runner/MockMapLoader.class</exclude>
+                                <exclude>com/ragnarok/runner/StartupDataLoader.class</exclude>
+                                <exclude>com/ragnarok/domain/model/SkillElement.class</exclude>
+                                <exclude>com/ragnarok/domain/model/SkillEffectType.class</exclude>
+                                <exclude>com/ragnarok/infrastructure/persistence/ItemEntity.class</exclude>
+                                <exclude>com/ragnarok/infrastructure/persistence/MonsterDropEntity.class</exclude>
+                                <exclude>com/ragnarok/infrastructure/persistence/PlayerEntity.class</exclude>
+                                <exclude>com/ragnarok/RagnarokCoreApplication.class</exclude>
+                            </excludes>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.85</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.62</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

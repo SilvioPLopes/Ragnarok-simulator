@@ -2,10 +2,12 @@ package com.ragnarok.infrastructure.persistence;
 
 import com.ragnarok.application.service.BattleService;
 import com.ragnarok.domain.model.ItemType;
+import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,10 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.jpa.hibernate.ddl-auto=update"
 })
 class BattleLootIntegrationTest {
+
+    @MockBean
+    @SuppressWarnings("unused")
+    private RagnarokTerminalRunner ragnarokTerminalRunner;
 
     @Autowired private PlayerRepository playerRepository;
     @Autowired private ItemRepository itemRepository;

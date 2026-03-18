@@ -3,11 +3,14 @@ package com.ragnarok.application.service;
 import com.ragnarok.domain.model.*;
 import com.ragnarok.domain.service.BattleEngine;
 import com.ragnarok.domain.service.LevelingService;
+import com.ragnarok.application.service.WeaponSizeService;
 import com.ragnarok.infrastructure.client.mapper.ItemMapper;
 import com.ragnarok.infrastructure.client.mapper.MonsterMapper;
+import com.ragnarok.infrastructure.persistence.ItemEntity;
 import com.ragnarok.infrastructure.persistence.MonsterEntity;
 import com.ragnarok.infrastructure.persistence.MonsterRepository;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
+import com.ragnarok.infrastructure.persistence.PlayerItemEntity;
 import com.ragnarok.infrastructure.persistence.PlayerItemRepository;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
@@ -24,7 +27,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,6 +56,9 @@ class BattleServiceTest {
 
     @Mock
     private LevelingService levelingService;
+
+    @Mock
+    private WeaponSizeService weaponSizeService;
 
     @InjectMocks
     private BattleService battleService;
@@ -139,6 +145,13 @@ class BattleServiceTest {
     void setupLevelingStub() {
         lenient().when(levelingService.processarExperiencia(any(Player.class), anyLong(), anyLong()))
                 .thenReturn(" (+5 Base XP) (+3 Job XP)");
+        // WeaponSizeService retorna int; Mockito default é 0, o que zeraria o dano.
+        // Retorna 100 (= 100% modificador, sem penalidade de tamanho).
+        lenient().when(weaponSizeService.getModifier(any(), any())).thenReturn(100);
+        // applyWeaponSizeModifier também é mock — sem stub retorna 0, zerando o dano.
+        // Passthrough: retorna o damage sem modificação.
+        lenient().when(battleEngine.applyWeaponSizeModifier(anyInt(), anyInt()))
+                .thenAnswer(inv -> inv.getArgument(0));
     }
 
     // ── Cenário 1: Ataque normal ──────────────────────────────────────────────
@@ -332,5 +345,83 @@ class BattleServiceTest {
 
         // BattleEngine não deve ser chamado
         verify(battleEngine, never()).calculateDamage(any(), any());
+    }
+
+    // ── Cenário: Monstro morre com loot — item novo adicionado ao inventário ────
+
+    @Test
+    @DisplayName("Monstro morre com loot — item novo é salvo no inventário do player")
+    void realizarAtaque_monsterMorreComLoot_itemNovoSalvoNoInventario() {
+        PlayerEntity playerEntity = makePlayerEntity(100);
+        MonsterEntity monsterEntity = makeMonsterEntity(10);
+        Player playerDomain = makeDomainPlayer(100);
+        Monster monsterDomain = makeDomainMonster(10);
+
+        Item lootItem = new Item();
+        lootItem.setId(500L);
+        lootItem.setName("Red Herb");
+
+        ItemEntity lootEntity = new ItemEntity();
+        lootEntity.setId(500L);
+        lootEntity.setName("Red Herb");
+
+        when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(playerEntity));
+        when(monsterRepository.findById(MONSTER_ID)).thenReturn(Optional.of(monsterEntity));
+        when(playerMapper.toDomain(playerEntity)).thenReturn(playerDomain);
+        when(monsterMapper.toDomain(monsterEntity)).thenReturn(monsterDomain);
+        when(battleEngine.calculateDamage(playerDomain, monsterDomain)).thenReturn(20);
+        when(battleEngine.calculateLoot(monsterDomain)).thenReturn(List.of(lootItem));
+        when(itemMapper.toEntity(lootItem)).thenReturn(lootEntity);
+        when(playerItemRepository.findByPlayerIdAndItemId(PLAYER_ID, 500L))
+                .thenReturn(new ArrayList<>());
+
+        String resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
+
+        verify(playerItemRepository).save(argThat(pi ->
+                pi.getItem().getId().equals(500L) && Integer.valueOf(1).equals(pi.getAmount())));
+        String resultadoUpper = resultado.toUpperCase();
+        assertTrue(resultadoUpper.contains("VITORIA") || resultadoUpper.contains("VITÓRIA")
+                        || resultadoUpper.contains("VICT"),
+                "Resultado deveria indicar vitória: " + resultado);
+    }
+
+    // ── Cenário: Monstro morre com loot — item já no inventário (stack merge) ───
+
+    @Test
+    @DisplayName("Monstro morre com loot — item existente tem quantidade incrementada (stack merge)")
+    void realizarAtaque_monsterMorreComLoot_itemExistenteIncrementaStack() {
+        PlayerEntity playerEntity = makePlayerEntity(100);
+        MonsterEntity monsterEntity = makeMonsterEntity(10);
+        Player playerDomain = makeDomainPlayer(100);
+        Monster monsterDomain = makeDomainMonster(10);
+
+        Item lootItem = new Item();
+        lootItem.setId(501L);
+        lootItem.setName("Blue Herb");
+
+        ItemEntity lootEntity = new ItemEntity();
+        lootEntity.setId(501L);
+        lootEntity.setName("Blue Herb");
+
+        PlayerItemEntity existingStack = new PlayerItemEntity();
+        existingStack.setItem(lootEntity);
+        existingStack.setAmount(3);
+        existingStack.setPlayer(playerEntity);
+
+        when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(playerEntity));
+        when(monsterRepository.findById(MONSTER_ID)).thenReturn(Optional.of(monsterEntity));
+        when(playerMapper.toDomain(playerEntity)).thenReturn(playerDomain);
+        when(monsterMapper.toDomain(monsterEntity)).thenReturn(monsterDomain);
+        when(battleEngine.calculateDamage(playerDomain, monsterDomain)).thenReturn(20);
+        when(battleEngine.calculateLoot(monsterDomain)).thenReturn(List.of(lootItem));
+        when(itemMapper.toEntity(lootItem)).thenReturn(lootEntity);
+        when(playerItemRepository.findByPlayerIdAndItemId(PLAYER_ID, 501L))
+                .thenReturn(List.of(existingStack));
+
+        battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
+
+        assertEquals(4, existingStack.getAmount(),
+                "Amount deve ser 3 existentes + 1 drop = 4");
+        verify(playerItemRepository).save(existingStack);
     }
 }

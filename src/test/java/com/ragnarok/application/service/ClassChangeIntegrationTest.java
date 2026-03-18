@@ -3,11 +3,13 @@ package com.ragnarok.application.service;
 import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
+import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
@@ -17,6 +19,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 @SpringBootTest
 class ClassChangeIntegrationTest {
+
+    @MockBean
+    @SuppressWarnings("unused")
+    private RagnarokTerminalRunner ragnarokTerminalRunner;
 
     @Autowired
     private ClassChangeService classChangeService;

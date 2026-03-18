@@ -2,11 +2,13 @@ package com.ragnarok.application.service;
 
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import com.ragnarok.infrastructure.persistence.PlayerSkillRepository;
+import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -14,6 +16,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 @SpringBootTest
 class SkillServiceAprenderTest {
+
+    @MockBean
+    @SuppressWarnings("unused")
+    private RagnarokTerminalRunner ragnarokTerminalRunner;
 
     @Autowired
     private SkillService skillService;
@@ -113,5 +119,46 @@ class SkillServiceAprenderTest {
         assertThrows(IllegalStateException.class,
                 () -> skillService.aprenderSkill(PLAYER_ID, skill.aegisName()),
                 "Deve lançar exceção quando skill está no nível máximo");
+    }
+
+    @Test
+    @DisplayName("aprenderSkill lança IllegalStateException quando sem Skill Points")
+    void aprenderSkill_semSkillPoints_lancaExcecao() {
+        var player = playerRepository.findById(PLAYER_ID).orElseThrow();
+        player.setSkillPoints(0);
+        playerRepository.save(player);
+
+        // Pega qualquer skill da árvore — não importa qual, sem SP sempre lança
+        var lista = skillService.listarSkillsDoPlayer(PLAYER_ID);
+        if (lista.isEmpty()) return; // sem dados de skill_tree, teste não se aplica
+
+        String qualquerSkill = lista.get(0).aegisName();
+        assertThrows(IllegalStateException.class,
+                () -> skillService.aprenderSkill(PLAYER_ID, qualquerSkill));
+    }
+
+    @Test
+    @DisplayName("aprenderSkill lança IllegalStateException para skill inexistente na classe")
+    void aprenderSkill_skillInexistente_lancaExcecao() {
+        // BOWLING_BASH é skill de Knight — não existe na árvore do Novice (player ID=1)
+        assertThrows(IllegalStateException.class,
+                () -> skillService.aprenderSkill(PLAYER_ID, "BOWLING_BASH"));
+    }
+
+    @Test
+    @DisplayName("listarSkillsDoPlayer retorna lista vazia quando player sem jobClass")
+    void listarSkillsDoPlayer_jobClassNula_retornaListaVazia() {
+        var tempPlayer = new com.ragnarok.infrastructure.persistence.PlayerEntity();
+        tempPlayer.setName("SemClasse");
+        tempPlayer.setJobClass(null);
+        tempPlayer = playerRepository.save(tempPlayer);
+        Long tempId = tempPlayer.getId();
+
+        try {
+            var lista = skillService.listarSkillsDoPlayer(tempId);
+            assertTrue(lista.isEmpty(), "Player sem jobClass deve retornar lista vazia");
+        } finally {
+            playerRepository.deleteById(tempId);
+        }
     }
 }
