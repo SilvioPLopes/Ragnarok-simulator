@@ -4,6 +4,19 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Secrets ###
+*.env
+.env.*
+
+### Claude AI ###
+.claude/
+CLAUDE.md
+
+### Python ###
+__pycache__/
+*.pyc
+*.pyo
+
 ### STS ###
 .apt_generated
 .classpath

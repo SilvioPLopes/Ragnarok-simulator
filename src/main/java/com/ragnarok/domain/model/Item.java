@@ -14,6 +14,7 @@ public class Item {
     private String imgUrl;
     private ItemType type;
     private EquipSlot equipSlot;
+    private WeaponType weaponType;
 
     // Objeto de Valor puro (sem @Embeddable)
     private ItemStats stats;

@@ -14,9 +14,11 @@ import java.util.stream.Collectors;
 public class PlayerMapper {
 
     private final ItemMapper itemMapper;
+    private final BuffSerializer buffSerializer;
 
-    public PlayerMapper(ItemMapper itemMapper) {
+    public PlayerMapper(ItemMapper itemMapper, BuffSerializer buffSerializer) {
         this.itemMapper = itemMapper;
+        this.buffSerializer = buffSerializer;
     }
 
     // 1. Entity -> Domain
@@ -63,6 +65,9 @@ public class PlayerMapper {
             player.setLocation(loc);
         }
 
+        // Buffs ativos
+        player.setActiveBuffs(buffSerializer.fromJson(entity.getActiveBuffsJson()));
+
         // Inventário
         if (entity.getInventory() != null) {
             List<PlayerItem> domainInventory = entity.getInventory().stream()
@@ -107,6 +112,9 @@ public class PlayerMapper {
             entity.setSpMax(domain.getStats().getMaxSp());
         }
 
+        // Buffs ativos
+        entity.setActiveBuffsJson(buffSerializer.toJson(domain.getActiveBuffs()));
+
         // Flattening Location
         if (domain.getLocation() != null) {
             entity.setMapName(domain.getLocation().getMapName());
@@ -117,6 +125,10 @@ public class PlayerMapper {
         }
 
         return entity;
+    }
+
+    public String serializeBuffs(Player player) {
+        return buffSerializer.toJson(player.getActiveBuffs());
     }
 
     private PlayerItem toDomainItem(PlayerItemEntity entity) {

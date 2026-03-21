@@ -2,6 +2,7 @@ package com.ragnarok.runner.importer;
 
 import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.ItemType;
+import com.ragnarok.domain.model.WeaponType;
 import com.ragnarok.infrastructure.persistence.ItemEntity;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -52,6 +53,14 @@ public class ItemDbParser {
             entity.setWeight(toInt(item.get("Weight")));
             entity.setPrice(toInt(item.get("Buy")));
 
+            String script = (String) item.get("Script");
+            entity.setScript(script);
+
+            // WeaponType — vem como SubType no rAthena (só relevante para WEAPON)
+            if (entity.getType() == ItemType.WEAPON) {
+                entity.setWeaponType(mapWeaponSubType((String) item.get("SubType")));
+            }
+
             // EquipSlot — vem como um mapa de localizations (ex: {Head_Top: true})
             Object locations = item.get("Locations");
             if (locations instanceof Map) {
@@ -78,6 +87,28 @@ public class ItemDbParser {
             case "Ammo"                                -> ItemType.AMMO;
             case "Card"                                -> ItemType.CARD;
             default                                    -> ItemType.ETC;
+        };
+    }
+
+    private WeaponType mapWeaponSubType(String subType) {
+        if (subType == null) return WeaponType.NONE;
+        return switch (subType) {
+            case "Dagger"            -> WeaponType.DAGGER;
+            case "Sword"             -> WeaponType.SWORD;
+            case "TwoHandSword"      -> WeaponType.TWO_HAND_SWORD;
+            case "Spear"             -> WeaponType.SPEAR;
+            case "TwoHandSpear"      -> WeaponType.TWO_HAND_SPEAR;
+            case "Axe"               -> WeaponType.AXE;
+            case "TwoHandAxe"        -> WeaponType.TWO_HAND_AXE;
+            case "Mace"              -> WeaponType.MACE;
+            case "Staff", "TwoHandStaff" -> WeaponType.STAFF;
+            case "Bow"               -> WeaponType.BOW;
+            case "Knuckle"           -> WeaponType.KNUCKLE;
+            case "MusicalInstrument" -> WeaponType.MUSICAL_INSTRUMENT;
+            case "Whip"              -> WeaponType.WHIP;
+            case "Book"              -> WeaponType.BOOK;
+            case "Katar"             -> WeaponType.KATAR;
+            default                  -> WeaponType.NONE;
         };
     }
 

@@ -5,6 +5,7 @@ import com.ragnarok.infrastructure.persistence.ItemRepository;
 import com.ragnarok.infrastructure.persistence.MonsterEntity;
 import com.ragnarok.infrastructure.persistence.MonsterRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -14,6 +15,7 @@ import java.util.List;
 
 @Component
 @Order(1)
+@Profile("!test")
 public class RathenaImporter implements CommandLineRunner {
 
     private static final String MOB_DB_URL =

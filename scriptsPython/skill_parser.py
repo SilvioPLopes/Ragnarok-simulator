@@ -41,7 +41,7 @@ def baixar_yaml(url, tentativas=5):
 
 
 def parsear_skills(content):
-    """Retorna lista de dicts: id, aegis_name, name, type"""
+    """Retorna lista de dicts: id, aegis_name, name, type, script"""
     data = yaml.safe_load(content)
     if not data or "Body" not in data:
         return []
@@ -52,6 +52,7 @@ def parsear_skills(content):
         aegis_name = skill.get("Name", "")       # AegisName no rAthena
         name       = skill.get("Description", aegis_name)
         skill_type = skill.get("SkillInfo", "")   # Passive, etc
+        script     = skill.get("Script", None)
 
         if not skill_id:
             continue
@@ -67,6 +68,7 @@ def parsear_skills(content):
             "aegis_name": str(aegis_name),
             "name":       str(name),
             "type":       str(skill_type),
+            "script":     str(script) if script else None,
         })
 
     return skills
@@ -121,21 +123,26 @@ def gerar_skills_sql(skills):
         f.write("    id          BIGINT PRIMARY KEY,\n")
         f.write("    aegis_name  VARCHAR(100) NOT NULL,\n")
         f.write("    name        VARCHAR(150),\n")
-        f.write("    type        VARCHAR(100)\n")
+        f.write("    type        VARCHAR(100),\n")
+        f.write("    script      TEXT\n")
         f.write(");\n\n")
+        f.write("ALTER TABLE skills ADD COLUMN IF NOT EXISTS script TEXT;\n\n")
 
         if skills:
-            f.write("INSERT INTO skills (id, aegis_name, name, type) VALUES\n")
+            f.write("INSERT INTO skills (id, aegis_name, name, type, script) VALUES\n")
             linhas = []
             for s in skills:
-                aegis = s["aegis_name"].replace("'", "''")
-                name  = s["name"].replace("'", "''")
-                stype = s["type"].replace("'", "''")
-                linhas.append(f"  ({s['id']}, '{aegis}', '{name}', '{stype}')")
+                aegis  = s["aegis_name"].replace("'", "''")
+                name   = s["name"].replace("'", "''")
+                stype  = s["type"].replace("'", "''")
+                script = s["script"].replace("'", "''") if s["script"] else None
+                script_val = f"'{script}'" if script else "NULL"
+                linhas.append(f"  ({s['id']}, '{aegis}', '{name}', '{stype}', {script_val})")
             f.write(",\n".join(linhas))
             f.write("\nON CONFLICT (id) DO UPDATE SET\n")
-            f.write("    name = EXCLUDED.name,\n")
-            f.write("    type = EXCLUDED.type;\n")
+            f.write("    name   = EXCLUDED.name,\n")
+            f.write("    type   = EXCLUDED.type,\n")
+            f.write("    script = EXCLUDED.script;\n")
 
     print(f"  skills.sql gerado — {len(skills)} skills")
 

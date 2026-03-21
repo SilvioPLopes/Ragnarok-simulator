@@ -1,9 +1,11 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.model.EffectResult;
 import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.Item;
 import com.ragnarok.domain.model.ItemStats;
 import com.ragnarok.domain.model.ItemType;
+import com.ragnarok.application.service.ScriptInterpreter;
 import com.ragnarok.infrastructure.client.mapper.ItemMapper;
 import com.ragnarok.infrastructure.persistence.*;
 import org.springframework.stereotype.Service;
@@ -20,15 +22,18 @@ public class ItemService {
     private final PlayerRepository playerRepository;
     private final PlayerItemRepository playerItemRepository;
     private final ItemMapper itemMapper;
+    private final ScriptInterpreter scriptInterpreter;
 
     public ItemService(ItemRepository itemRepository,
                        PlayerRepository playerRepository,
                        PlayerItemRepository playerItemRepository,
-                       ItemMapper itemMapper) {
+                       ItemMapper itemMapper,
+                       ScriptInterpreter scriptInterpreter) {
         this.itemRepository = itemRepository;
         this.playerRepository = playerRepository;
         this.playerItemRepository = playerItemRepository;
         this.itemMapper = itemMapper;
+        this.scriptInterpreter = scriptInterpreter;
     }
 
     public com.ragnarok.domain.model.Item criarItemDeTeste(Long id, String name, int attack) {
@@ -118,7 +123,24 @@ public class ItemService {
 
     private String consumirItem(PlayerItemEntity itemEntity) {
         PlayerEntity player = itemEntity.getPlayer();
-        var stats = itemEntity.getItem().getStats();
+        ItemEntity item = itemEntity.getItem();
+        String nome = item.getName();
+
+        // Tenta interpretar via script rAthena
+        if (item.getScript() != null) {
+            EffectResult result = scriptInterpreter.interpret(item.getScript());
+            if (!result.supported()) {
+                return "Este item não pode ser usado ainda.";
+            }
+            int hpMax = player.getHpMax() != null ? player.getHpMax() : 100;
+            int spMax = player.getSpMax() != null ? player.getSpMax() : 40;
+            int hpHeal = result.isPercent() ? hpMax * result.hpHeal() / 100 : result.hpHeal();
+            int spHeal = result.isPercent() ? spMax * result.spHeal() / 100 : result.spHeal();
+            return aplicarCura(player, itemEntity, hpHeal, spHeal, nome);
+        }
+
+        // Fallback legado: usa campo efeito (UPDATEs manuais anteriores)
+        var stats = item.getStats();
         Integer efeitoHp = stats.getEfeito();
         Integer efeitoSp = stats.getBonusSP();
 
@@ -126,34 +148,38 @@ public class ItemService {
         boolean temEfeitoSp = efeitoSp != null && efeitoSp > 0;
 
         if (!temEfeitoHp && !temEfeitoSp) {
-            return "Este item não tem efeito ao ser usado.";
+            return "Este item não tem efeito.";
         }
 
+        return aplicarCura(player, itemEntity, temEfeitoHp ? efeitoHp : 0, temEfeitoSp ? efeitoSp : 0, nome);
+    }
+
+    private String aplicarCura(PlayerEntity player, PlayerItemEntity itemEntity, int hpHeal, int spHeal, String nome) {
         int hpAtual = player.getHpCurrent() != null ? player.getHpCurrent() : 0;
-        int hpMax = player.getHpMax() != null ? player.getHpMax() : 100;
+        int hpMax   = player.getHpMax()     != null ? player.getHpMax()     : 100;
         int spAtual = player.getSpCurrent() != null ? player.getSpCurrent() : 0;
-        int spMax = player.getSpMax() != null ? player.getSpMax() : 40;
+        int spMax   = player.getSpMax()     != null ? player.getSpMax()     : 40;
 
         boolean hpCheio = hpAtual >= hpMax;
         boolean spCheio = spAtual >= spMax;
 
-        if ((temEfeitoHp && hpCheio && !temEfeitoSp) || (!temEfeitoHp && temEfeitoSp && spCheio)) {
-            return temEfeitoHp ? "Seu HP já está cheio!" : "Seu SP já está cheio!";
+        if ((hpHeal > 0 && hpCheio && spHeal == 0) || (spHeal > 0 && spCheio && hpHeal == 0)) {
+            return hpHeal > 0 ? "Seu HP já está cheio!" : "Seu SP já está cheio!";
         }
-        if (temEfeitoHp && temEfeitoSp && hpCheio && spCheio) {
+        if (hpHeal > 0 && spHeal > 0 && hpCheio && spCheio) {
             return "HP e SP já estão cheios!";
         }
 
         int hpCurado = 0;
         int spCurado = 0;
 
-        if (temEfeitoHp && !hpCheio) {
-            int novoHp = Math.min(hpMax, hpAtual + efeitoHp);
+        if (hpHeal > 0 && !hpCheio) {
+            int novoHp = Math.min(hpMax, hpAtual + hpHeal);
             hpCurado = novoHp - hpAtual;
             player.setHpCurrent(novoHp);
         }
-        if (temEfeitoSp && !spCheio) {
-            int novoSp = Math.min(spMax, spAtual + efeitoSp);
+        if (spHeal > 0 && !spCheio) {
+            int novoSp = Math.min(spMax, spAtual + spHeal);
             spCurado = novoSp - spAtual;
             player.setSpCurrent(novoSp);
         }
@@ -167,7 +193,6 @@ public class ItemService {
             playerItemRepository.delete(itemEntity);
         }
 
-        String nome = itemEntity.getItem().getName();
         if (hpCurado > 0 && spCurado > 0) {
             return String.format("Você usou %s e recuperou %d de HP e %d de SP.", nome, hpCurado, spCurado);
         } else if (hpCurado > 0) {

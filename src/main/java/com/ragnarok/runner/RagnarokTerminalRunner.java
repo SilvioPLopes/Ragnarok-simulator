@@ -6,6 +6,7 @@ import com.ragnarok.application.service.ItemService;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.application.service.SkillRowDTO;
 import com.ragnarok.application.service.SkillService;
+import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.*;
@@ -97,7 +98,8 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         System.out.println("2. Portais");
         System.out.println("3. Inventario");
         System.out.println("4. Ver Status");
-        System.out.println("5. Sair");
+        System.out.println("5. Usar Skill");
+        System.out.println("6. Sair");
         System.out.print("> ");
 
         String input = scanner.nextLine();
@@ -105,7 +107,8 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         else if ("2".equals(input)) renderPortaisMenu(mapaAtual);
         else if ("3".equals(input)) renderInventoryMenu();
         else if ("4".equals(input)) renderStatusMenu();
-        else if ("5".equals(input)) System.exit(0);
+        else if ("5".equals(input)) renderOutOfBattleSkillMenu();
+        else if ("6".equals(input)) System.exit(0);
     }
 
     private void renderPortaisMenu(String mapaAtual) {
@@ -387,16 +390,59 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         }
     }
 
+    private void renderOutOfBattleSkillMenu() {
+        clearScreen();
+        List<SkillRowDTO> skills = skillService.listarSkillsUsaveisForaDeCombate(currentPlayer.getId());
+
+        System.out.println("\n=== USAR SKILL (Fora de Combate) ===");
+
+        if (skills.isEmpty()) {
+            System.out.println("Nenhuma skill de buff ou cura aprendida.");
+            System.out.println("(Pressione ENTER para voltar)");
+            scanner.nextLine();
+            return;
+        }
+
+        for (int i = 0; i < skills.size(); i++) {
+            SkillRowDTO sk = skills.get(i);
+            System.out.printf("%d. %s (Lv %d)%n", (i + 1), sk.aegisName(), sk.currentLevel());
+        }
+        System.out.println("0. Voltar");
+        System.out.print("> ");
+
+        int escolha;
+        try {
+            escolha = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            return;
+        }
+
+        if (escolha == 0 || escolha < 1 || escolha > skills.size()) return;
+
+        String aegisName = skills.get(escolha - 1).aegisName();
+        try {
+            String resultado = skillService.usarSkillEmCombate(currentPlayer.getId(), aegisName, null);
+            System.out.println(">>> " + resultado);
+        } catch (IllegalStateException e) {
+            System.out.println(">>> " + e.getMessage());
+        }
+        System.out.println("(Pressione ENTER para continuar)");
+        scanner.nextLine();
+    }
+
     private void renderBattleMenu() {
         clearScreen();
         PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
 
         System.out.println("\n================================================");
-        System.out.printf("  VOCE: HP %d/%d%n", p.getHpCurrent(), p.getHpMax());
+        System.out.printf("  VOCE: HP %d/%d | SP %d/%d%n",
+                p.getHpCurrent(), p.getHpMax(), p.getSpCurrent(), p.getSpMax());
         System.out.printf("  %s: HP %d%n", currentMonster.getName(), currentMonster.getHp());
         System.out.println("================================================");
         System.out.println("1. Atacar");
-        System.out.println("2. Fugir");
+        System.out.println("2. Usar Skill");
+        System.out.println("3. Usar Item");
+        System.out.println("4. Fugir");
         System.out.print("> ");
 
         String input = scanner.nextLine();
@@ -405,7 +451,6 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
             System.out.println("------------------------------------------------");
             System.out.println(resultado);
 
-            // Mostra HP atualizado do jogador após contra-ataque
             PlayerEntity pAtualizado = playerRepo.findById(currentPlayer.getId()).orElseThrow();
             System.out.printf("  >> Seu HP atual: %d/%d%n", pAtualizado.getHpCurrent(), pAtualizado.getHpMax());
             System.out.println("------------------------------------------------");
@@ -419,10 +464,95 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
                 handlePlayerDeath();
             }
         } else if ("2".equals(input)) {
+            renderBattleSkillMenu();
+        } else if ("3".equals(input)) {
+            renderBattleItemMenu();
+        } else if ("4".equals(input)) {
             System.out.println("Voce fugiu!");
             inBattle = false;
             currentMonster = null;
         }
+    }
+
+    private void renderBattleSkillMenu() {
+        List<SkillRowDTO> skills = skillService.listarSkillsDoPlayer(currentPlayer.getId())
+                .stream()
+                .filter(sk -> sk.currentLevel() > 0)
+                .toList();
+
+        if (skills.isEmpty()) {
+            System.out.println("Voce nao tem skills aprendidas.");
+            System.out.println("(Pressione ENTER para voltar)");
+            scanner.nextLine();
+            return;
+        }
+
+        System.out.println("\n=== USAR SKILL ===");
+        for (int i = 0; i < skills.size(); i++) {
+            SkillRowDTO sk = skills.get(i);
+            System.out.printf("%d. %s (Lv %d)%n", (i + 1), sk.aegisName(), sk.currentLevel());
+        }
+        System.out.println("0. Voltar");
+        System.out.print("> ");
+
+        int escolha;
+        try {
+            escolha = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            return;
+        }
+
+        if (escolha == 0 || escolha < 1 || escolha > skills.size()) return;
+
+        String aegisName = skills.get(escolha - 1).aegisName();
+        try {
+            String resultado = skillService.usarSkillEmCombate(currentPlayer.getId(), aegisName, currentMonster.getId());
+            System.out.println(">>> " + resultado);
+        } catch (IllegalStateException e) {
+            System.out.println(">>> " + e.getMessage());
+        }
+        System.out.println("(Pressione ENTER para continuar)");
+        scanner.nextLine();
+    }
+
+    private void renderBattleItemMenu() {
+        List<PlayerItemEntity> consumiveis = playerItemRepo.findByPlayerId(currentPlayer.getId())
+                .stream()
+                .filter(pi -> pi.getItem().getType() == ItemType.CONSUMABLE)
+                .toList();
+
+        if (consumiveis.isEmpty()) {
+            System.out.println("Voce nao tem itens consumiveis.");
+            System.out.println("(Pressione ENTER para voltar)");
+            scanner.nextLine();
+            return;
+        }
+
+        System.out.println("\n=== USAR ITEM ===");
+        for (int i = 0; i < consumiveis.size(); i++) {
+            PlayerItemEntity pi = consumiveis.get(i);
+            System.out.printf("%d. %s (x%d)%n", (i + 1), pi.getItem().getName(), pi.getAmount());
+        }
+        System.out.println("0. Voltar");
+        System.out.print("> ");
+
+        int escolha;
+        try {
+            escolha = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            return;
+        }
+
+        if (escolha == 0 || escolha < 1 || escolha > consumiveis.size()) return;
+
+        try {
+            String resultado = itemService.usarItem(consumiveis.get(escolha - 1).getId());
+            System.out.println(">>> " + resultado);
+        } catch (Exception e) {
+            System.out.println(">>> " + e.getMessage());
+        }
+        System.out.println("(Pressione ENTER para continuar)");
+        scanner.nextLine();
     }
 
     private void caminhar(String mapaAtual) {
