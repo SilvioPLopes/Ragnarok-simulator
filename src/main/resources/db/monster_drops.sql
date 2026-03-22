@@ -8,7 +8,9 @@ CREATE TABLE IF NOT EXISTS monster_drops (
     UNIQUE (monster_id, item_id)
 );
 
-INSERT INTO monster_drops (monster_id, item_id, rate) VALUES
+INSERT INTO monster_drops (monster_id, item_id, rate)
+SELECT t.monster_id::BIGINT, t.item_id::BIGINT, t.rate
+FROM (VALUES
   (1001, 990, 35),
   (1001, 904, 2750),
   (1001, 757, 29),
@@ -12553,4 +12555,7 @@ INSERT INTO monster_drops (monster_id, item_id, rate) VALUES
   (22239, 1001426, 2250),
   (22239, 1001427, 2250),
   (22239, 996, 500)
+) AS t(monster_id, item_id, rate)
+WHERE EXISTS (SELECT 1 FROM monsters WHERE id = t.monster_id::BIGINT)
+  AND EXISTS (SELECT 1 FROM items WHERE id = t.item_id::BIGINT)
 ON CONFLICT (monster_id, item_id) DO UPDATE SET rate = EXCLUDED.rate;

@@ -117,14 +117,18 @@ def main():
         f.write("    amount      INTEGER NOT NULL DEFAULT 1,\n")
         f.write("    UNIQUE (map_id, monster_id)\n")
         f.write(");\n\n")
-        f.write("INSERT INTO map_monsters (map_id, monster_id, amount) VALUES\n")
+        f.write("INSERT INTO map_monsters (map_id, monster_id, amount)\n")
+        f.write("SELECT t.map_id, t.monster_id::BIGINT, t.amount\n")
+        f.write("FROM (VALUES\n")
 
         linhas = [
             f"  ('{s['mapa']}', {s['monster_id']}, {s['amount']})"
             for s in todos_spawns
         ]
         f.write(",\n".join(linhas))
-        f.write("\nON CONFLICT (map_id, monster_id) DO UPDATE SET amount = EXCLUDED.amount;\n")
+        f.write("\n) AS t(map_id, monster_id, amount)\n")
+        f.write("WHERE EXISTS (SELECT 1 FROM monsters WHERE id = t.monster_id::BIGINT)\n")
+        f.write("ON CONFLICT (map_id, monster_id) DO UPDATE SET amount = EXCLUDED.amount;\n")
 
     print("map_monsters.sql gerado")
 

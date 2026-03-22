@@ -8,7 +8,9 @@ CREATE TABLE IF NOT EXISTS map_monsters (
     UNIQUE (map_id, monster_id)
 );
 
-INSERT INTO map_monsters (map_id, monster_id, amount) VALUES
+INSERT INTO map_monsters (map_id, monster_id, amount)
+SELECT t.map_id, t.monster_id::BIGINT, t.amount
+FROM (VALUES
   ('ama_fild01', 1060, 14),
   ('ama_fild01', 1400, 72),
   ('ama_fild01', 1406, 57),
@@ -2383,4 +2385,6 @@ INSERT INTO map_monsters (map_id, monster_id, amount) VALUES
   ('um_dun02', 1078, 5),
   ('um_dun02', 1083, 6),
   ('xmas_dun02', 1515, 1)
+) AS t(map_id, monster_id, amount)
+WHERE EXISTS (SELECT 1 FROM monsters WHERE id = t.monster_id::BIGINT)
 ON CONFLICT (map_id, monster_id) DO UPDATE SET amount = EXCLUDED.amount;
