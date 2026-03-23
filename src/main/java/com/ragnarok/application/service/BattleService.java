@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class BattleService {
@@ -92,7 +93,9 @@ public class BattleService {
             long baseExp = monster.getBaseExp() != null ? monster.getBaseExp() : 0L;
             long jobExp  = monster.getJobExp()  != null ? monster.getJobExp()  : 0L;
             eventPublisher.publishEvent(new MonsterKilledEvent(playerId, monsterId, loot, baseExp, jobExp));
-            return "\uD83C\uDF1F VITÓRIA! O " + monster.getName() + " foi derrotado.";
+            String dropLog = loot.isEmpty() ? "" :
+                    "\nDrop: " + loot.stream().map(Item::getName).collect(Collectors.joining(", "));
+            return "\uD83C\uDF1F VITÓRIA! O " + monster.getName() + " foi derrotado." + dropLog;
         }
 
 

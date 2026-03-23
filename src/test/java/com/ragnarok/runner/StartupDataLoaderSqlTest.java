@@ -1,5 +1,6 @@
 package com.ragnarok.runner;
 
+import com.ragnarok.AbstractIntegrationTest;
 import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.infrastructure.persistence.ItemEntity;
 import com.ragnarok.infrastructure.persistence.ItemRepository;
@@ -10,12 +11,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 import javax.sql.DataSource;
@@ -30,10 +28,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * Cenário coberto: o perfil "test" pula esses scripts no StartupDataLoader,
  * portanto sem esse teste o fix do WHERE EXISTS nunca seria exercido automaticamente.
  */
-@ActiveProfiles("test")
-@SpringBootTest
 @TestPropertySource(properties = {"spring.jpa.hibernate.ddl-auto=update"})
-class StartupDataLoaderSqlTest {
+class StartupDataLoaderSqlTest extends AbstractIntegrationTest {
 
     // ID real do rAthena — presente em monster_drops.sql e map_monsters.sql
     private static final long PORING_ID = 1002L;
@@ -41,10 +37,6 @@ class StartupDataLoaderSqlTest {
     private static final long ITEM_909_ID = 909L;
     // Monster de evento — presente nos SQLs mas ausente na tabela monsters
     private static final long EVENT_MONSTER_ID = 20649L;
-
-    @MockBean
-    @SuppressWarnings("unused")
-    private RagnarokTerminalRunner ragnarokTerminalRunner;
 
     @Autowired private DataSource dataSource;
     @Autowired private JdbcTemplate jdbc;
@@ -222,8 +214,11 @@ class StartupDataLoaderSqlTest {
     private void limpar() {
         jdbc.update("DELETE FROM monster_drops WHERE monster_id IN (?, ?)", PORING_ID, EVENT_MONSTER_ID);
         jdbc.update("DELETE FROM map_monsters  WHERE monster_id IN (?, ?)", PORING_ID, EVENT_MONSTER_ID);
-        jdbc.update("DELETE FROM monster_spawns WHERE monster_id IN (?, ?)", PORING_ID, EVENT_MONSTER_ID);
+        try {
+            jdbc.update("DELETE FROM monster_spawns WHERE monster_id IN (?, ?)", PORING_ID, EVENT_MONSTER_ID);
+        } catch (Exception ignored) { /* table may not exist in all environments */ }
         jdbc.update("DELETE FROM monsters WHERE id IN (?, ?)", PORING_ID, EVENT_MONSTER_ID);
+        jdbc.update("DELETE FROM monster_drops WHERE item_id = ?", ITEM_909_ID);
         jdbc.update("DELETE FROM items WHERE id = ?", ITEM_909_ID);
     }
 }

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -37,10 +38,16 @@ class SkillServiceIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private MonsterRepository monsterRepository;
 
+    @Autowired
+    private CacheManager cacheManager;
+
     private static final Long PLAYER_ID = 1L;
 
     @BeforeEach
     void limparSkillsDoPlayer() {
+        var cache = cacheManager.getCache("playerSkills");
+        if (cache != null) cache.evict(PLAYER_ID);
+
         playerSkillRepository.findByPlayerId(PLAYER_ID)
                 .forEach(s -> playerSkillRepository.delete(s));
     }

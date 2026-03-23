@@ -1,27 +1,19 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.AbstractIntegrationTest;
 import com.ragnarok.application.dto.SkillRowDTO;
 import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import com.ragnarok.infrastructure.persistence.PlayerSkillRepository;
-import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.cache.CacheManager;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@ActiveProfiles("test")
-@SpringBootTest
-class SkillServiceAprenderTest {
-
-    @MockBean
-    @SuppressWarnings("unused")
-    private RagnarokTerminalRunner ragnarokTerminalRunner;
+class SkillServiceAprenderTest extends AbstractIntegrationTest {
 
     @Autowired
     private SkillService skillService;
@@ -32,10 +24,17 @@ class SkillServiceAprenderTest {
     @Autowired
     private PlayerSkillRepository playerSkillRepository;
 
+    @Autowired
+    private CacheManager cacheManager;
+
     private static final Long PLAYER_ID = 1L;
 
     @BeforeEach
     void setup() {
+        // Evict stale playerSkills cache before each test
+        var cache = cacheManager.getCache("playerSkills");
+        if (cache != null) cache.evict(PLAYER_ID);
+
         // Limpa skills do player e garante que tem skill points
         playerSkillRepository.findByPlayerId(PLAYER_ID)
                 .forEach(playerSkillRepository::delete);

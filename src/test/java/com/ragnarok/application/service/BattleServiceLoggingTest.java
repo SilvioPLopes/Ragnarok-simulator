@@ -43,6 +43,7 @@ class BattleServiceLoggingTest {
     @Mock private BattleEngine battleEngine;
     @Mock private LevelingService levelingService;
     @Mock private WeaponSizeService weaponSizeService;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private BattleService battleService;
@@ -104,9 +105,9 @@ class BattleServiceLoggingTest {
         when(battleEngine.applyWeaponSizeModifier(anyInt(), anyInt())).thenReturn(999);
         when(weaponSizeService.getModifier(any(), any())).thenReturn(100);
         when(battleEngine.calculateLoot(any())).thenReturn(List.of());
-        when(levelingService.processarExperiencia(any(), anyLong(), anyLong())).thenReturn("EXP: +5\n");
+        lenient().when(levelingService.processarExperiencia(any(), anyLong(), anyLong())).thenReturn("EXP: +5\n");
         lenient().when(playerMapper.serializeBuffs(any())).thenReturn("[]");
-        when(playerRepository.save(any())).thenReturn(playerEntity);
+        lenient().when(playerRepository.save(any())).thenReturn(playerEntity);
 
         battleService.realizarAtaque(1L, 10L);
 

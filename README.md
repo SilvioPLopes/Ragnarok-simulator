@@ -2,6 +2,7 @@
 
 ![CI](https://github.com/SilvioPLopes/ragnarok-core/actions/workflows/ci.yml/badge.svg)
 ![Coverage](https://img.shields.io/badge/coverage-85%25%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-240%20passing-brightgreen)
 
 The core engine of a Ragnarok Online emulation and data-management system built on **Hexagonal Architecture (Ports and Adapters)**. All game data (monsters, items, maps, warps, drops, skills) is imported directly from the official **rAthena** server (`db/re/` — Renewal version).
 
@@ -25,7 +26,12 @@ The core engine of a Ragnarok Online emulation and data-management system built 
 | Class Change | Operational | NOVICE → Tier1 → Tier2 → Tier3 with job level validation |
 | Auto Startup | Operational | `StartupDataLoader` populates all static tables on boot |
 | Schema Management | Operational | Flyway V1 migration; Hibernate validates on startup |
-| Test Coverage | **212 tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% instruction / ≥ 62% branch) |
+| Resilience4j | Operational | `@Retry` (3 attempts, 2 s exponential backoff) + `@CircuitBreaker` on rAthena download |
+| Spring Cache (Caffeine) | Operational | `weaponSizeModifiers`, `skillBuffEffects`, `skillTree`, `playerSkills` — zero repeated queries in battle |
+| REST API + Swagger UI | Operational | Full game loop via browser: Players, Battle, Skills, Inventory, Map — `GET /swagger-ui.html` |
+| Spring Events | Operational | `BattleService` publishes `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` handles loot, XP, resurrection |
+| Testcontainers | Operational | All integration tests use an ephemeral PostgreSQL container — no local DB required for `./mvnw test` |
+| Test Coverage | **240 tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
 
 ---
 
@@ -47,17 +53,34 @@ The project strictly follows the separation of concerns of hexagonal architectur
 
 | Service | Responsibility |
 |---|---|
-| `BattleService` | Combat cycle, death, loot, and XP |
+| `BattleService` | Combat turn: damage, counter-attack, weapon-size modifier; publishes `MonsterKilledEvent` / `PlayerDiedEvent` |
+| `BattleEventHandler` | `@EventListener`: persists loot, processes XP via `LevelingService`, publishes `PlayerLeveledUpEvent`, resurrects player |
 | `SkillService` | Class-chain listing, prerequisite validation, and skill learning |
 | `SkillCombatService` | Skill usage in combat: HEAL, BUFF, PHYSICAL_DAMAGE, MAGICAL_DAMAGE |
 | `ClassChangeService` | Class progression with job level validation |
 | `ItemService` | Inventory management, equip/unequip, auto slot-swap |
+| `MapService` | Current map info, portal listing, walk (random encounter), and travel between maps |
 | `PlayerService` | Character creation and management |
 | `MonsterCatalogService` | Monster ETL via external API |
-| `WeaponSizeService` | Size modifier lookup by weapon type and monster size |
+| `WeaponSizeService` | Size modifier lookup by weapon type and monster size (`@Cacheable`) |
 | `ScriptInterpreter` | Formula evaluation engine (`"ATK * skill_lv * 1.3"`) |
 
-### 3. Infrastructure (`com.ragnarok.infrastructure`)
+### 3. REST API (`com.ragnarok.api`)
+
+Exposes the full game loop as a REST API with OpenAPI documentation via **springdoc-openapi**.
+
+| Controller | Endpoints |
+|---|---|
+| `PlayerController` | `GET /api/players`, `GET /api/players/{id}`, `POST /api/players` |
+| `BattleController` | `POST /api/battle/attack` |
+| `SkillController` | `GET /api/players/{id}/skills`, `POST .../learn`, `POST .../use` |
+| `ItemController` | `GET /api/players/{id}/inventory`, `POST .../inventory/{itemId}/use` |
+| `MapController` | `GET /api/players/{id}/map`, `GET /api/maps/{mapId}/portals`, `POST .../walk`, `POST .../travel` |
+| `GlobalExceptionHandler` | `@RestControllerAdvice`: maps domain exceptions to HTTP 400/404/500 |
+
+**Swagger UI:** `http://localhost:8080/swagger-ui.html` — interactive docs for all 5 groups without cloning the repo.
+
+### 4. Infrastructure (`com.ragnarok.infrastructure`)
 
 **Adapters to the outside world.**
 
@@ -66,7 +89,7 @@ The project strictly follows the separation of concerns of hexagonal architectur
 - **Mapper:** Translator bridge. Converts `DTO → Domain → Entity`, applying sanitization and safe unboxing.
 - **`BuffSerializer`:** Serializes/deserializes the `ActiveBuff` list as JSON in the player's `active_buffs_json` column.
 
-### 4. Runner (`com.ragnarok.runner`)
+### 5. Runner (`com.ragnarok.runner`)
 
 | Class | Order | Function |
 |---|---|---|
@@ -137,7 +160,37 @@ Resilient flow that loads external data, sanitizes inconsistencies, and performs
 5. **HEAL:** Formula evaluated to restore player HP
 6. **Size Modifier:** `WeaponSizeService` queries `weapon_size_modifiers` for the damage percentage by weapon × monster size (Small/Medium/Large)
 
-### 8. Safety & Resilience (Null Safety)
+### 8. Spring Events — Decoupled Battle Pipeline
+
+`BattleService` publishes domain events via `ApplicationEventPublisher` instead of calling other services directly. All side-effects of combat are handled asynchronously (but synchronously in the same transaction) by `BattleEventHandler`.
+
+```
+realizarAtaque()
+  └─ monster HP ≤ 0
+       └─ battleEngine.calculateLoot(monster)
+       └─ eventPublisher.publishEvent(MonsterKilledEvent)   ← same TX
+            └─ BattleEventHandler.onMonsterKilled()
+                 ├─ persist loot → player_items
+                 ├─ levelingService.processarExperiencia()
+                 ├─ save PlayerEntity (base/job level, XP, stat/skill points)
+                 └─ if leveled up → publishEvent(PlayerLeveledUpEvent)
+
+  └─ player HP ≤ 0
+       └─ eventPublisher.publishEvent(PlayerDiedEvent)       ← same TX
+            └─ BattleEventHandler.onPlayerDied()
+                 ├─ hpCurrent = hpMax
+                 └─ mapName = "prontera"
+```
+
+**Domain events:**
+
+| Event | Fields | Publisher | Handler |
+|---|---|---|---|
+| `MonsterKilledEvent` | `playerId`, `monsterId`, `List<Item> loot`, `baseExp`, `jobExp` | `BattleService` | `BattleEventHandler.onMonsterKilled` |
+| `PlayerDiedEvent` | `playerId` | `BattleService` | `BattleEventHandler.onPlayerDied` |
+| `PlayerLeveledUpEvent` | `playerId`, `newBaseLevel`, `newJobLevel` | `BattleEventHandler` | — (logged) |
+
+### 9. Safety & Resilience (Null Safety)
 
 1. **Shielded Mapper:** `PlayerMapper` implements Safe Unboxing — `NULL` in numeric fields (XP, Points, Zenny) is converted to `0` before instantiating the Domain, preventing `NullPointerException`
 2. **Safe Drop Rate:** `MonsterMapper.mapDrop` treats `rate = null` as `0.0` — item never drops accidentally
@@ -222,21 +275,41 @@ pip install requests pyyaml psycopg2-binary --break-system-packages
 
 ```text
 com.ragnarok
+├── api
+│   ├── GlobalExceptionHandler.java       # @RestControllerAdvice — maps exceptions to HTTP codes
+│   ├── controller
+│   │   ├── BattleController.java         # POST /api/battle/attack
+│   │   ├── ItemController.java           # GET/POST /api/players/{id}/inventory
+│   │   ├── MapController.java            # GET/POST /api/players/{id}/map
+│   │   ├── PlayerController.java         # GET/POST /api/players
+│   │   └── SkillController.java          # GET/POST /api/players/{id}/skills
+│   └── dto
+│       ├── request/                      # AttackRequestDTO, CreatePlayerRequestDTO, TravelRequestDTO, UseSkillRequestDTO
+│       └── response/                     # PlayerResponseDTO, BattleResponseDTO, SkillRowResponseDTO,
+│                                         # InventoryItemResponseDTO, MapInfoResponseDTO, WalkResponseDTO
+│
 ├── application
 │   ├── dto
-│   │   └── SkillRowDTO.java              # Public record for skill display in the terminal
+│   │   ├── SkillRowDTO.java              # Public record for skill display in the terminal
+│   │   └── WalkResult.java              # record: encounterOccurred, monsterId, message
 │   └── service
-│       ├── BattleService.java            # Combat cycle, loot, XP
+│       ├── BattleEventHandler.java       # @EventListener: loot persistence, XP, resurrection
+│       ├── BattleService.java            # Combat turn; publishes MonsterKilledEvent / PlayerDiedEvent
 │       ├── ClassChangeService.java       # Class progression
 │       ├── ItemService.java              # Inventory, equip, auto-swap
+│       ├── MapService.java               # Current map, portals, walk, travel
 │       ├── MonsterCatalogService.java    # Monster ETL via external API
 │       ├── PlayerService.java            # Character creation and management
 │       ├── ScriptInterpreter.java        # Formula engine: "ATK * skill_lv * 1.3"
 │       ├── SkillCombatService.java       # Skill usage in combat (HEAL, BUFF, DAMAGE)
 │       ├── SkillService.java             # Listing (class chain), learning, passive application
-│       └── WeaponSizeService.java        # Damage modifier: weapon_type × monster_size
+│       └── WeaponSizeService.java        # Damage modifier: weapon_type × monster_size (@Cacheable)
 │
 ├── domain
+│   ├── event
+│   │   ├── MonsterKilledEvent.java       # record(playerId, monsterId, List<Item> loot, baseExp, jobExp)
+│   │   ├── PlayerDiedEvent.java          # record(playerId)
+│   │   └── PlayerLeveledUpEvent.java     # record(playerId, newBaseLevel, newJobLevel)
 │   ├── model
 │   │   ├── ActiveBuff.java              # Active buff (skill, stat, value, remaining turns)
 │   │   ├── BattleResult.java
@@ -310,6 +383,14 @@ com.ragnarok
 | `ActiveBuff` | Active buff: source skill, `StatType`, value, and `durationTurns` (-1 = permanent) |
 | `JobClass` | Enum with all jobs (Tier 0–4), `parentClass` for progression chain, and base stats per class |
 
+### Domain Events
+
+| Event | Description |
+|---|---|
+| `MonsterKilledEvent` | Published by `BattleService` when monster HP reaches 0; carries loot list, baseExp, jobExp |
+| `PlayerDiedEvent` | Published by `BattleService` when player HP reaches 0; triggers resurrection in `BattleEventHandler` |
+| `PlayerLeveledUpEvent` | Published by `BattleEventHandler` when base or job level increases |
+
 ### Domain Services
 
 | Class | Description |
@@ -333,10 +414,12 @@ com.ragnarok
 
 ## Test Coverage
 
-**212 tests — 0 failures — BUILD SUCCESS**
+**240 tests — 0 failures — BUILD SUCCESS**
 
 > Run with Java 17: `JAVA_HOME=/path/to/jdk-17 ./mvnw test`
 > (Java 21+ breaks Mockito inline-mock-maker without additional `--add-opens` configuration)
+>
+> **Integration tests require Docker Desktop running** — Testcontainers starts a PostgreSQL container automatically.
 
 ### Unit Tests
 
@@ -351,14 +434,25 @@ com.ragnarok
 | `WeaponSizeServiceTest` | 6 | Modifiers by weapon type and monster size |
 | `ClassChangeServiceTest` | 14 | `listarClassesDisponiveis`, `trocarClasse` with repository mocks |
 | `BattleServiceTest` | 10 | Normal attack, death (VICTORY), counter-attack, player death (FATAL), null guards |
+| `BattleServiceLoggingTest` | 2 | WARN on dead-player attack, INFO on monster kill — Logback `ListAppender` |
+| `BattleEventHandlerTest` | 4 | Loot persistence, XP fields, level-up event publication, player resurrection |
 | `SkillCombatServiceTest` | 9 | Skill not found, not learned, insufficient SP, passive, HEAL, BUFF with duration, BUFF without effects, PHYSICAL_DAMAGE with/without target |
+| `PlayerControllerTest` | — | REST: list, get by id, create player |
+| `BattleControllerTest` | — | REST: attack, dead player 400, player/monster not found 404 |
+| `SkillControllerTest` | — | REST: list skills, learn, use |
+| `ItemControllerTest` | — | REST: list inventory, use item |
+| `MapControllerTest` | — | REST: current map, portals, walk, travel |
+| `GlobalExceptionHandlerTest` | — | HTTP 400 / 404 / 500 mapping for all domain exceptions |
+| `CacheVerificationTest` | 2 | `@SpyBean` verifies `findByWeaponType` called exactly once in two consecutive hits |
+| `ClassChangeLoggingTest` | 2 | Log messages for class change |
+| `ParserLoggingTest` | 4 | Log output from rAthena YAML parsers |
 
-### Integration Tests
+### Integration Tests (Testcontainers — require Docker)
 
 | Class | Tests | Coverage |
 |---|---|---|
 | `BattleIntegrationTest` | 2 | Physical damage and counter-attack on real database |
-| `BattleLootIntegrationTest` | 1 | Drop RNG and persistence in `player_items` |
+| `BattleLootIntegrationTest` | 1 | Drop RNG, inventory persistence, victory message includes drop names |
 | `SkillServiceIntegrationTest` | 10 | Listing, available skills, HEAL, BUFF, insufficient SP, PASSIVE, PHYSICAL_DAMAGE, BUFF without effects |
 | `SkillServiceAprenderTest` | 7 | Level increment, skillPoints decrement, max level, non-existent skill, null jobClass |
 | `ClassChangeIntegrationTest` | 2 | `trocarClasse` persists `jobClass/jobLevel/jobExp`; listing for NOVICE |
@@ -371,6 +465,7 @@ com.ragnarok
 | `RagnarokTerminalRunnerTest` | 11 | Auto-resurrection, exploration flows |
 | `MonsterCatalogServiceTest` | 1 | Full ETL API → database |
 | `ItemLoadingTest` | 1 | Item loading |
+| `RagnarokCoreApplicationTests` | 1 | Spring context loads successfully |
 
 ---
 
@@ -393,6 +488,11 @@ com.ragnarok
 - **Stat/skill points accumulate in multi-level-up**
 - **LevelingService:** Base/job level caps per class via `JobClass.maxJobLevel()`
 - **Schema Migration:** Flyway V1 migration, `ddl-auto=validate`
+- **Resilience4j:** `@Retry` (3 attempts, 2 s exponential backoff) + `@CircuitBreaker` on `RathenaDownloadService`; fallback logs WARN and skips import
+- **Testcontainers:** `AbstractIntegrationTest` (Singleton Container Pattern) — all integration tests use an ephemeral `postgres:16` container; no local DB required for `./mvnw test`
+- **Spring Cache (Caffeine):** `@EnableCaching` + `CacheConfig` with 4 named caches; `@Cacheable` / `@CacheEvict` on `WeaponSizeService`, `SkillService`, `SkillTreeRepository`, `SkillBuffEffectRepository`
+- **REST API + Swagger UI:** 5 controllers (Players, Battle, Skills, Inventory, Map), `GlobalExceptionHandler`, springdoc-openapi — full game loop playable at `http://localhost:8080/swagger-ui.html`
+- **Spring Events:** `BattleService` decoupled via `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` owns loot persistence, XP processing, and player resurrection
 
 ### Backlog
 
@@ -429,8 +529,16 @@ com.ragnarok
 # Run the application (interactive terminal — requires direct JVM stdin)
 java -jar target/ragnarok-core-0.0.1-SNAPSHOT.jar
 
-# Run all tests (Java 17 recommended)
+# Run all tests — requires Docker Desktop running (Testcontainers)
 JAVA_HOME=/path/to/jdk-17 ./mvnw test
+
+# Run only unit tests (no Docker needed)
+JAVA_HOME=/path/to/jdk-17 ./mvnw test -Djacoco.skip=true \
+  -Dtest="BattleServiceTest,BattleEventHandlerTest,BattleServiceLoggingTest,\
+RagnarokTerminalRunnerTest,GlobalExceptionHandlerTest,PlayerControllerTest,\
+BattleControllerTest,SkillControllerTest,ItemControllerTest,MapControllerTest,\
+WeaponSizeServiceTest,SkillCombatServiceTest,ItemServiceTest,ClassChangeServiceTest,\
+CacheVerificationTest"
 
 # Run a specific test
 ./mvnw test -Dtest=BattleEngineTest
@@ -438,7 +546,24 @@ JAVA_HOME=/path/to/jdk-17 ./mvnw test
 
 **Prerequisites:**
 - Java 17+
-- PostgreSQL running on `localhost:5432` with database `ragnarok_db`
+- PostgreSQL running on `localhost:5432` with database `ragnarok_db` (for the application)
+- **Docker Desktop** (for `./mvnw test` — Testcontainers starts a `postgres:16` container automatically)
 - Environment variable `DB_PASS` with the PostgreSQL password (local default: `postgre`)
 
 > On the first startup, `RathenaImporter` downloads data from rAthena via GitHub (~2675 monsters + all items). `StartupDataLoader` populates the rest. The application is ready in ~30–60 seconds depending on connection speed.
+
+### REST API / Swagger UI
+
+Once the application is running, open **`http://localhost:8080/swagger-ui.html`** to play via browser without cloning the repo.
+
+Recommended flow:
+```
+1. POST /api/players          — {"name":"Hero","jobClass":"NOVICE"}  → note the returned "id"
+2. GET  /api/players/{id}     — verify HP, level, zenny
+3. POST /api/players/{id}/map/walk  → if encounterOccurred=true, note monsterId
+4. POST /api/battle/attack    — {"playerId":1,"monsterId":1002}  → repeat until VITÓRIA
+5. GET  /api/players/{id}/inventory — verify dropped items
+6. GET  /api/players/{id}/skills    — list learnable skills
+7. POST /api/players/{id}/skills/NV_BASIC/learn
+8. POST /api/players/{id}/map/travel — {"destination":"izlude"}
+```

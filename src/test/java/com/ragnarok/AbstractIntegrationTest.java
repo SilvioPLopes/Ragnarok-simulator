@@ -7,19 +7,19 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Base class for all integration tests.
  *
- * Starts a single PostgreSQL container shared across all test classes in the same JVM run.
- * The container is declared static, so it is initialized once per test suite execution.
+ * Uses the Singleton Container pattern: the PostgreSQL container is started once
+ * via static initializer and lives for the entire JVM run, shared across all
+ * subclasses. This prevents Testcontainers from stopping/restarting the container
+ * between test classes, which would cause port changes and break the cached
+ * Spring application context.
  *
  * @MockBean RagnarokTerminalRunner suppresses the interactive terminal loop during tests.
  * Subclasses must NOT re-declare this mock.
  */
-@Testcontainers
 @SpringBootTest
 @ActiveProfiles("test")
 public abstract class AbstractIntegrationTest {
@@ -28,9 +28,12 @@ public abstract class AbstractIntegrationTest {
     @SuppressWarnings("unused")
     RagnarokTerminalRunner ragnarokTerminalRunner;
 
-    @Container
-    static final PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:16");
+    static final PostgreSQLContainer<?> postgres;
+
+    static {
+        postgres = new PostgreSQLContainer<>("postgres:16");
+        postgres.start();
+    }
 
     @DynamicPropertySource
     static void configureDataSource(DynamicPropertyRegistry registry) {
