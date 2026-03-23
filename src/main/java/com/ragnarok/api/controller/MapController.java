@@ -3,6 +3,7 @@ package com.ragnarok.api.controller;
 import com.ragnarok.api.dto.request.TravelRequestDTO;
 import com.ragnarok.api.dto.response.MapInfoResponseDTO;
 import com.ragnarok.api.dto.response.WalkResponseDTO;
+import com.ragnarok.application.dto.WalkResult;
 import com.ragnarok.application.service.MapService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,7 +38,10 @@ public class MapController {
     @PostMapping("/api/players/{playerId}/map/walk")
     @Operation(summary = "Walk in the current map — 70% chance of monster encounter")
     public ResponseEntity<WalkResponseDTO> walk(@PathVariable Long playerId) {
-        return ResponseEntity.ok(mapService.walk(playerId));
+        WalkResult result = mapService.walk(playerId);
+        return ResponseEntity.ok(new WalkResponseDTO(
+                result.encounterOccurred(), result.monsterId(),
+                result.monsterName(), result.monsterHp(), result.message()));
     }
 
     @PostMapping("/api/players/{playerId}/map/travel")

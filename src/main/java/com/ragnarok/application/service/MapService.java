@@ -1,6 +1,6 @@
 package com.ragnarok.application.service;
 
-import com.ragnarok.api.dto.response.WalkResponseDTO;
+import com.ragnarok.application.dto.WalkResult;
 import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.persistence.*;
 import org.slf4j.Logger;
@@ -60,20 +60,20 @@ public class MapService {
 
     /**
      * Simulates walking in the current map.
-     * Returns a WalkResponseDTO with encounter result.
+     * Returns a WalkResult with encounter result.
      */
-    public WalkResponseDTO walk(Long playerId) {
+    public WalkResult walk(Long playerId) {
         PlayerEntity player = playerRepository.findById(playerId)
                 .orElseThrow(() -> new GameException("Player not found: " + playerId));
         String map = player.getMapName() != null ? player.getMapName() : "prontera";
 
         if (rng.nextInt(100) >= 70) {
-            return new WalkResponseDTO(false, null, null, null, "Nenhum monstro por aqui.");
+            return new WalkResult(false, null, null, null, "Nenhum monstro por aqui.");
         }
 
         List<MapMonsterEntity> entries = mapMonsterRepository.findByMapId(map);
         if (entries.isEmpty()) {
-            return new WalkResponseDTO(false, null, null, null, "Nenhum monstro registrado neste mapa.");
+            return new WalkResult(false, null, null, null, "Nenhum monstro registrado neste mapa.");
         }
 
         int totalWeight = entries.stream().mapToInt(e -> e.getAmount() != null ? e.getAmount() : 1).sum();
@@ -91,7 +91,7 @@ public class MapService {
             monsterRepository.save(monster);
         }
 
-        return new WalkResponseDTO(true, monster.getId(), monster.getName(), monster.getHp(),
+        return new WalkResult(true, monster.getId(), monster.getName(), monster.getHp(),
                 monster.getName().toUpperCase() + " APARECEU!");
     }
 }

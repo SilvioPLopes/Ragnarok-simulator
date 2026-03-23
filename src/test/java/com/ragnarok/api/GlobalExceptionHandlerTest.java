@@ -4,6 +4,7 @@ import com.ragnarok.application.service.BattleService;
 import com.ragnarok.api.controller.BattleController;
 import com.ragnarok.api.dto.request.AttackRequestDTO;
 import com.ragnarok.domain.exception.PlayerDeadException;
+import com.ragnarok.domain.exception.SkillNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,5 +47,29 @@ class GlobalExceptionHandlerTest {
                .content(objectMapper.writeValueAsString(new AttackRequestDTO(99L, 2L))))
            .andExpect(status().isNotFound())
            .andExpect(jsonPath("$.error").value("Player not found"));
+    }
+
+    @Test
+    void skillNotFoundException_returns404() throws Exception {
+        when(battleService.realizarAtaque(1L, 2L))
+                .thenThrow(new SkillNotFoundException("SM_BASH"));
+
+        mvc.perform(post("/api/battle/attack")
+               .contentType(MediaType.APPLICATION_JSON)
+               .content(objectMapper.writeValueAsString(new AttackRequestDTO(1L, 2L))))
+           .andExpect(status().isNotFound())
+           .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void unexpectedException_returns500() throws Exception {
+        when(battleService.realizarAtaque(1L, 2L))
+                .thenThrow(new RuntimeException("unexpected"));
+
+        mvc.perform(post("/api/battle/attack")
+               .contentType(MediaType.APPLICATION_JSON)
+               .content(objectMapper.writeValueAsString(new AttackRequestDTO(1L, 2L))))
+           .andExpect(status().isInternalServerError())
+           .andExpect(jsonPath("$.error").exists());
     }
 }

@@ -3,7 +3,7 @@ package com.ragnarok.api.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.TravelRequestDTO;
-import com.ragnarok.api.dto.response.WalkResponseDTO;
+import com.ragnarok.application.dto.WalkResult;
 import com.ragnarok.application.service.MapService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +49,7 @@ class MapControllerTest {
 
     @Test
     void walk_encounterOccurred_returnsMonsterInfo() throws Exception {
-        WalkResponseDTO walkResult = new WalkResponseDTO(true, 1002L, "Poring", 55, "PORING APARECEU!");
+        WalkResult walkResult = new WalkResult(true, 1002L, "Poring", 55, "PORING APARECEU!");
         when(mapService.walk(1L)).thenReturn(walkResult);
 
         mvc.perform(post("/api/players/1/map/walk"))
@@ -60,7 +60,7 @@ class MapControllerTest {
 
     @Test
     void walk_noEncounter_returnsEncounterFalse() throws Exception {
-        WalkResponseDTO walkResult = new WalkResponseDTO(false, null, null, null, "Nenhum monstro.");
+        WalkResult walkResult = new WalkResult(false, null, null, null, "Nenhum monstro.");
         when(mapService.walk(1L)).thenReturn(walkResult);
 
         mvc.perform(post("/api/players/1/map/walk"))
