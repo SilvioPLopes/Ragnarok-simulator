@@ -10,7 +10,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,8 +23,6 @@ public class RathenaImporter implements CommandLineRunner {
 
     private static final String MOB_DB_URL =
             "https://raw.githubusercontent.com/rathena/rathena/master/db/re/mob_db.yml";
-
-    // O item_db.yml principal não tem itens — ele importa 3 arquivos separados
     private static final String ITEM_DB_USABLE =
             "https://raw.githubusercontent.com/rathena/rathena/master/db/re/item_db_usable.yml";
     private static final String ITEM_DB_EQUIP =
@@ -37,39 +34,46 @@ public class RathenaImporter implements CommandLineRunner {
     private final ItemRepository itemRepo;
     private final MobDbParser mobParser;
     private final ItemDbParser itemParser;
+    private final RathenaDownloadService downloadService;
 
     public RathenaImporter(MonsterRepository monsterRepo,
                            ItemRepository itemRepo,
                            MobDbParser mobParser,
-                           ItemDbParser itemParser) {
+                           ItemDbParser itemParser,
+                           RathenaDownloadService downloadService) {
         this.monsterRepo = monsterRepo;
         this.itemRepo    = itemRepo;
         this.mobParser   = mobParser;
         this.itemParser  = itemParser;
+        this.downloadService = downloadService;
     }
 
     @Override
     public void run(String... args) {
         if (monsterRepo.count() == 0) {
             log.info("Importing monsters from rAthena...");
-            String yaml = downloadYaml(MOB_DB_URL);
-            List<MonsterEntity> monsters = mobParser.parse(yaml);
-            monsterRepo.saveAll(monsters);
-            log.info("Imported {} monsters.", monsters.size());
+            String yaml = downloadService.download(MOB_DB_URL);
+            if (yaml != null) {
+                List<MonsterEntity> monsters = mobParser.parse(yaml);
+                monsterRepo.saveAll(monsters);
+                log.info("Imported {} monsters.", monsters.size());
+            } else {
+                log.warn("Monster import skipped — download returned null.");
+            }
         } else {
             log.info("Monsters already exist in the database. Skipping import.");
         }
 
         if (itemRepo.count() == 0) {
             log.info("Importing items from rAthena...");
-
             List<ItemEntity> todos = new ArrayList<>();
             todos.addAll(parsearArquivo("Usable", ITEM_DB_USABLE));
             todos.addAll(parsearArquivo("Equip",  ITEM_DB_EQUIP));
             todos.addAll(parsearArquivo("Etc",    ITEM_DB_ETC));
-
-            itemRepo.saveAll(todos);
-            log.info("Imported {} items total.", todos.size());
+            if (!todos.isEmpty()) {
+                itemRepo.saveAll(todos);
+                log.info("Imported {} items total.", todos.size());
+            }
         } else {
             log.info("Items already exist in the database. Skipping import.");
         }
@@ -77,14 +81,13 @@ public class RathenaImporter implements CommandLineRunner {
 
     private List<ItemEntity> parsearArquivo(String nome, String url) {
         log.info("  Downloading {} items...", nome);
-        String yaml = downloadYaml(url);
+        String yaml = downloadService.download(url);
+        if (yaml == null) {
+            log.warn("  {} item download skipped — download returned null.", nome);
+            return List.of();
+        }
         List<ItemEntity> itens = itemParser.parse(yaml);
         log.info("  Parsed {} items from {}.", itens.size(), nome);
         return itens;
-    }
-
-    private String downloadYaml(String url) {
-        RestTemplate rest = new RestTemplate();
-        return rest.getForObject(url, String.class);
     }
 }
