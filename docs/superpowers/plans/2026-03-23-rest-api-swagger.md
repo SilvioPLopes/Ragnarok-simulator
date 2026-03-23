@@ -4,9 +4,9 @@
 
 **Goal:** Expose the full game loop as a REST API with Swagger UI, enabling anyone to interact with the game via browser without cloning the repo.
 
-**Architecture:** Add a new `com.ragnarok.api` package with controllers, request/response DTOs, and a global exception handler. All controllers delegate to existing application services — zero business logic in the API layer. A new `MapService` is created to extract map navigation logic currently embedded in `RagnarokTerminalRunner`.
+**Architecture:** Add a new `com.ragnarok.api` package with controllers, request/response DTOs, and a global exception handler. Controllers are pure delegators — they call application services, never repositories. A new `MapService` extracts map navigation logic from `RagnarokTerminalRunner`. `PlayerService` and `ItemService` receive new read methods to support listing endpoints.
 
-**Tech Stack:** Spring Boot 3.4.2, springdoc-openapi 2.8.6, MockMvc (`@WebMvcTest`) for controller tests.
+**Tech Stack:** Spring Boot 3.4.2, springdoc-openapi 2.8.6, `@WebMvcTest` + MockMvc for controller tests.
 
 ---
 
@@ -15,6 +15,9 @@
 | Action | File |
 |---|---|
 | Modify | `pom.xml` |
+| Modify | `src/main/java/com/ragnarok/application/service/PlayerService.java` |
+| Modify | `src/main/java/com/ragnarok/application/service/ItemService.java` |
+| Create | `src/main/java/com/ragnarok/application/service/MapService.java` |
 | Create | `src/main/java/com/ragnarok/api/dto/response/PlayerResponseDTO.java` |
 | Create | `src/main/java/com/ragnarok/api/dto/response/BattleResponseDTO.java` |
 | Create | `src/main/java/com/ragnarok/api/dto/response/SkillUseResponseDTO.java` |
@@ -27,13 +30,11 @@
 | Create | `src/main/java/com/ragnarok/api/dto/request/TravelRequestDTO.java` |
 | Create | `src/main/java/com/ragnarok/api/dto/request/CreatePlayerRequestDTO.java` |
 | Create | `src/main/java/com/ragnarok/api/GlobalExceptionHandler.java` |
-| Create | `src/main/java/com/ragnarok/application/service/MapService.java` |
 | Create | `src/main/java/com/ragnarok/api/controller/PlayerController.java` |
 | Create | `src/main/java/com/ragnarok/api/controller/BattleController.java` |
 | Create | `src/main/java/com/ragnarok/api/controller/SkillController.java` |
 | Create | `src/main/java/com/ragnarok/api/controller/ItemController.java` |
 | Create | `src/main/java/com/ragnarok/api/controller/MapController.java` |
-| Modify | `pom.xml` (JaCoCo exclusions for controllers covered by WebMvcTest) |
 | Create | `src/test/java/com/ragnarok/api/controller/PlayerControllerTest.java` |
 | Create | `src/test/java/com/ragnarok/api/controller/BattleControllerTest.java` |
 | Create | `src/test/java/com/ragnarok/api/controller/SkillControllerTest.java` |
@@ -42,15 +43,16 @@
 
 ---
 
-## Task 1: Add springdoc-openapi dependency
+## Task 1: Add dependency and extend services
 
 **Files:**
 - Modify: `pom.xml`
+- Modify: `src/main/java/com/ragnarok/application/service/PlayerService.java`
+- Modify: `src/main/java/com/ragnarok/application/service/ItemService.java`
 
-- [ ] **Step 1: Add dependency**
+- [ ] **Step 1: Add springdoc dependency to pom.xml**
 
-Inside `<dependencies>` in `pom.xml`, add:
-
+Inside `<dependencies>`:
 ```xml
 <dependency>
     <groupId>org.springdoc</groupId>
@@ -59,31 +61,67 @@ Inside `<dependencies>` in `pom.xml`, add:
 </dependency>
 ```
 
-- [ ] **Step 2: Verify build compiles**
+- [ ] **Step 2: Read PlayerService.java before editing**
+
+Read `src/main/java/com/ragnarok/application/service/PlayerService.java`. Add two new methods at the end:
+
+```java
+public List<PlayerEntity> listarPersonagens() {
+    return playerRepository.findAll();
+}
+
+public PlayerEntity buscarPersonagem(Long id) {
+    return playerRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Player not found: " + id));
+}
+```
+
+Add import: `import java.util.List;`
+
+- [ ] **Step 3: Read ItemService.java before editing**
+
+Read `src/main/java/com/ragnarok/application/service/ItemService.java`. Add one new method:
+
+```java
+public List<PlayerItemEntity> listarInventario(Long playerId) {
+    return playerItemRepository.findByPlayerId(playerId);
+}
+```
+
+Verify `playerItemRepository` is already a field in `ItemService`. If not, inject it in the constructor (it is already used for equip operations — it should already exist).
+
+- [ ] **Step 4: Verify compilation**
 
 ```bash
 ./mvnw compile -q
 ```
 
-Expected: `BUILD SUCCESS` with no errors.
+Expected: `BUILD SUCCESS`.
 
-- [ ] **Step 3: Verify Swagger UI endpoint exists**
-
-Start the app and access `http://localhost:8080/swagger-ui.html` — it should show an empty Swagger UI page (no endpoints yet).
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Run existing tests to confirm no regressions**
 
 ```bash
-git add pom.xml
-git commit -m "build: add springdoc-openapi 2.8.6 for Swagger UI"
+./mvnw test -q
+```
+
+Expected: all existing tests pass.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add pom.xml \
+        src/main/java/com/ragnarok/application/service/PlayerService.java \
+        src/main/java/com/ragnarok/application/service/ItemService.java
+git commit -m "feat(api): add springdoc dependency and extend PlayerService/ItemService with read methods"
 ```
 
 ---
 
-## Task 2: Create response and request DTOs
+## Task 2: Create DTOs and MapService
 
 **Files:**
-- Create 8 response DTOs, 4 request DTOs
+- Create all DTOs
+- Create: `src/main/java/com/ragnarok/application/service/MapService.java`
 
 - [ ] **Step 1: Create response DTOs**
 
@@ -92,25 +130,14 @@ git commit -m "build: add springdoc-openapi 2.8.6 for Swagger UI"
 package com.ragnarok.api.dto.response;
 
 public record PlayerResponseDTO(
-        Long id,
-        String name,
-        String jobClass,
-        Integer baseLevel,
-        Integer jobLevel,
-        Integer hpCurrent,
-        Integer hpMax,
-        Integer spCurrent,
-        Integer spMax,
-        Integer str,
-        Integer agi,
-        Integer vit,
-        Integer intelligence,
-        Integer dex,
-        Integer luk,
-        Integer statPoints,
-        Integer skillPoints,
-        Long zenny,
-        String mapName
+        Long id, String name, String jobClass,
+        Integer baseLevel, Integer jobLevel,
+        Integer hpCurrent, Integer hpMax,
+        Integer spCurrent, Integer spMax,
+        Integer str, Integer agi, Integer vit,
+        Integer intelligence, Integer dex, Integer luk,
+        Integer statPoints, Integer skillPoints,
+        Long zenny, String mapName
 ) {}
 ```
 
@@ -133,12 +160,9 @@ public record SkillUseResponseDTO(String message) {}
 package com.ragnarok.api.dto.response;
 
 public record SkillRowResponseDTO(
-        String aegisName,
-        String name,
-        Integer maxLevel,
-        Integer currentLevel,
-        Boolean canLearn,
-        String blockedReason
+        String aegisName, String name,
+        Integer maxLevel, Integer currentLevel,
+        Boolean canLearn, String blockedReason
 ) {}
 ```
 
@@ -147,11 +171,8 @@ public record SkillRowResponseDTO(
 package com.ragnarok.api.dto.response;
 
 public record InventoryItemResponseDTO(
-        String id,
-        String name,
-        String type,
-        Integer amount,
-        Boolean equipped
+        String id, String name, String type,
+        Integer amount, Boolean equipped
 ) {}
 ```
 
@@ -168,7 +189,13 @@ public record MapInfoResponseDTO(String currentMap, List<String> availablePortal
 ```java
 package com.ragnarok.api.dto.response;
 
-public record WalkResponseDTO(boolean encounterOccurred, Long monsterId, String monsterName, Integer monsterHp, String message) {}
+public record WalkResponseDTO(
+        boolean encounterOccurred,
+        Long monsterId,
+        String monsterName,
+        Integer monsterHp,
+        String message
+) {}
 ```
 
 - [ ] **Step 2: Create request DTOs**
@@ -201,87 +228,13 @@ package com.ragnarok.api.dto.request;
 public record CreatePlayerRequestDTO(String name, String jobClass) {}
 ```
 
-- [ ] **Step 3: Verify compilation**
-
-```bash
-./mvnw compile -q
-```
-
-Expected: `BUILD SUCCESS`.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/main/java/com/ragnarok/api/
-git commit -m "feat(api): add request and response DTOs"
-```
-
----
-
-## Task 3: Create GlobalExceptionHandler and MapService
-
-**Files:**
-- Create: `src/main/java/com/ragnarok/api/GlobalExceptionHandler.java`
-- Create: `src/main/java/com/ragnarok/application/service/MapService.java`
-
-- [ ] **Step 1: Create GlobalExceptionHandler**
-
-`src/main/java/com/ragnarok/api/GlobalExceptionHandler.java`:
-```java
-package com.ragnarok.api;
-
-import com.ragnarok.domain.exception.GameException;
-import com.ragnarok.domain.exception.PlayerDeadException;
-import com.ragnarok.domain.exception.SkillNotFoundException;
-import com.ragnarok.domain.exception.InsufficientSpException;
-import com.ragnarok.domain.exception.InsufficientSkillPointsException;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import java.util.Map;
-
-@RestControllerAdvice
-public class GlobalExceptionHandler {
-
-    @ExceptionHandler(SkillNotFoundException.class)
-    public ResponseEntity<Map<String, String>> handleSkillNotFound(SkillNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
-    }
-
-    @ExceptionHandler({PlayerDeadException.class, InsufficientSpException.class,
-                        InsufficientSkillPointsException.class})
-    public ResponseEntity<Map<String, String>> handleGameRuleViolation(GameException e) {
-        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, String>> handleNotFound(IllegalArgumentException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
-    }
-
-    @ExceptionHandler(GameException.class)
-    public ResponseEntity<Map<String, String>> handleGame(GameException e) {
-        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, String>> handleUnexpected(Exception e) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Internal server error: " + e.getMessage()));
-    }
-}
-```
-
-- [ ] **Step 2: Create MapService**
-
-This extracts the map navigation logic from `RagnarokTerminalRunner` (methods `caminhar()` and `iniciarEncontroAleatorio()`):
+- [ ] **Step 3: Create MapService**
 
 `src/main/java/com/ragnarok/application/service/MapService.java`:
 ```java
 package com.ragnarok.application.service;
 
+import com.ragnarok.api.dto.response.WalkResponseDTO;
 import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.persistence.*;
 import org.slf4j.Logger;
@@ -339,16 +292,23 @@ public class MapService {
         playerRepository.save(player);
     }
 
-    /** Returns a random monster encounter on the player's current map, or null if no encounter. */
-    public MonsterEntity walk(Long playerId) {
+    /**
+     * Simulates walking in the current map.
+     * Returns a WalkResponseDTO with encounter result — no infrastructure types leak to callers.
+     */
+    public WalkResponseDTO walk(Long playerId) {
         PlayerEntity player = playerRepository.findById(playerId)
                 .orElseThrow(() -> new GameException("Player not found: " + playerId));
         String map = player.getMapName() != null ? player.getMapName() : "prontera";
 
-        if (rng.nextInt(100) >= 70) return null;  // 70% encounter chance
+        if (rng.nextInt(100) >= 70) {
+            return new WalkResponseDTO(false, null, null, null, "Nenhum monstro por aqui.");
+        }
 
         List<MapMonsterEntity> entries = mapMonsterRepository.findByMapId(map);
-        if (entries.isEmpty()) return null;
+        if (entries.isEmpty()) {
+            return new WalkResponseDTO(false, null, null, null, "Nenhum monstro registrado neste mapa.");
+        }
 
         int totalWeight = entries.stream().mapToInt(e -> e.getAmount() != null ? e.getAmount() : 1).sum();
         int roll = rng.nextInt(totalWeight);
@@ -356,10 +316,7 @@ public class MapService {
         MapMonsterEntity chosen = entries.get(0);
         for (MapMonsterEntity entry : entries) {
             accumulated += entry.getAmount() != null ? entry.getAmount() : 1;
-            if (roll < accumulated) {
-                chosen = entry;
-                break;
-            }
+            if (roll < accumulated) { chosen = entry; break; }
         }
 
         MonsterEntity monster = chosen.getMonster();
@@ -367,12 +324,14 @@ public class MapService {
             monster.setHp(100);
             monsterRepository.save(monster);
         }
-        return monster;
+
+        return new WalkResponseDTO(true, monster.getId(), monster.getName(), monster.getHp(),
+                monster.getName().toUpperCase() + " APARECEU!");
     }
 }
 ```
 
-- [ ] **Step 3: Verify compilation**
+- [ ] **Step 4: Verify compilation**
 
 ```bash
 ./mvnw compile -q
@@ -380,12 +339,139 @@ public class MapService {
 
 Expected: `BUILD SUCCESS`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/main/java/com/ragnarok/api/ \
+        src/main/java/com/ragnarok/application/service/MapService.java
+git commit -m "feat(api): add DTOs and MapService"
+```
+
+---
+
+## Task 3: GlobalExceptionHandler
+
+**Files:**
+- Create: `src/main/java/com/ragnarok/api/GlobalExceptionHandler.java`
+
+- [ ] **Step 1: Write failing test**
+
+`src/test/java/com/ragnarok/api/GlobalExceptionHandlerTest.java`:
+```java
+package com.ragnarok.api;
+
+import com.ragnarok.application.service.BattleService;
+import com.ragnarok.api.controller.BattleController;
+import com.ragnarok.api.dto.request.AttackRequestDTO;
+import com.ragnarok.domain.exception.PlayerDeadException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(BattleController.class)
+@Import(GlobalExceptionHandler.class)
+class GlobalExceptionHandlerTest {
+
+    @Autowired MockMvc mvc;
+    @Autowired ObjectMapper objectMapper;
+    @MockBean BattleService battleService;
+
+    @Test
+    void playerDeadException_returns400WithErrorField() throws Exception {
+        when(battleService.realizarAtaque(1L, 2L)).thenThrow(new PlayerDeadException());
+
+        mvc.perform(post("/api/battle/attack")
+               .contentType(MediaType.APPLICATION_JSON)
+               .content(objectMapper.writeValueAsString(new AttackRequestDTO(1L, 2L))))
+           .andExpect(status().isBadRequest())
+           .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void illegalArgumentException_returns404() throws Exception {
+        when(battleService.realizarAtaque(99L, 2L))
+                .thenThrow(new IllegalArgumentException("Player not found"));
+
+        mvc.perform(post("/api/battle/attack")
+               .contentType(MediaType.APPLICATION_JSON)
+               .content(objectMapper.writeValueAsString(new AttackRequestDTO(99L, 2L))))
+           .andExpect(status().isNotFound())
+           .andExpect(jsonPath("$.error").value("Player not found"));
+    }
+}
+```
+
+- [ ] **Step 2: Run test — expect FAIL**
+
+```bash
+./mvnw test -Dtest=GlobalExceptionHandlerTest -q
+```
+
+- [ ] **Step 3: Implement GlobalExceptionHandler**
+
+`src/main/java/com/ragnarok/api/GlobalExceptionHandler.java`:
+```java
+package com.ragnarok.api;
+
+import com.ragnarok.domain.exception.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.Map;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(SkillNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleSkillNotFound(SkillNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleNotFound(IllegalArgumentException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(GameException.class)
+    public ResponseEntity<Map<String, String>> handleGame(GameException e) {
+        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> handleUnexpected(Exception e) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Internal server error: " + e.getMessage()));
+    }
+}
+```
+
+**Note on ordering:** Spring resolves `@ExceptionHandler` by most-specific type first. `SkillNotFoundException extends GameException` — the explicit `SkillNotFoundException` handler fires before the general `GameException` handler. `PlayerDeadException`, `InsufficientSpException`, etc. all extend `GameException` and are caught by the general handler with `400`. `IllegalArgumentException` is not a `GameException`, so it is caught by its own handler with `404`.
+
+- [ ] **Step 4: Run test — expect PASS**
+
+```bash
+./mvnw test -Dtest=GlobalExceptionHandlerTest -q
+```
+
+Expected: `Tests run: 2, Failures: 0, Errors: 0`.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add src/main/java/com/ragnarok/api/GlobalExceptionHandler.java \
-        src/main/java/com/ragnarok/application/service/MapService.java
-git commit -m "feat(api): add GlobalExceptionHandler and MapService"
+        src/test/java/com/ragnarok/api/GlobalExceptionHandlerTest.java
+git commit -m "feat(api): add GlobalExceptionHandler with correct exception ordering"
 ```
 
 ---
@@ -403,38 +489,36 @@ git commit -m "feat(api): add GlobalExceptionHandler and MapService"
 package com.ragnarok.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.CreatePlayerRequestDTO;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
-import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
-import java.util.Optional;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(PlayerController.class)
+@Import(GlobalExceptionHandler.class)
 class PlayerControllerTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
-
-    @MockBean PlayerRepository playerRepository;
     @MockBean PlayerService playerService;
 
     @Test
     void getPlayers_returnsEmptyList() throws Exception {
-        when(playerRepository.findAll()).thenReturn(List.of());
+        when(playerService.listarPersonagens()).thenReturn(List.of());
         mvc.perform(get("/api/players"))
            .andExpect(status().isOk())
            .andExpect(content().json("[]"));
@@ -442,7 +526,8 @@ class PlayerControllerTest {
 
     @Test
     void getPlayer_notFound_returns404() throws Exception {
-        when(playerRepository.findById(99L)).thenReturn(Optional.empty());
+        when(playerService.buscarPersonagem(99L))
+                .thenThrow(new IllegalArgumentException("Player not found: 99"));
         mvc.perform(get("/api/players/99"))
            .andExpect(status().isNotFound());
     }
@@ -456,12 +541,11 @@ class PlayerControllerTest {
         entity.setBaseLevel(1);
         entity.setHpCurrent(100);
         entity.setHpMax(100);
-        when(playerRepository.findById(1L)).thenReturn(Optional.of(entity));
+        when(playerService.buscarPersonagem(1L)).thenReturn(entity);
 
         mvc.perform(get("/api/players/1"))
            .andExpect(status().isOk())
-           .andExpect(jsonPath("$.name").value("Hero"))
-           .andExpect(jsonPath("$.jobClass").value("NOVICE"));
+           .andExpect(jsonPath("$.name").value("Hero"));
     }
 
     @Test
@@ -479,13 +563,11 @@ class PlayerControllerTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run test — expect FAIL**
 
 ```bash
 ./mvnw test -Dtest=PlayerControllerTest -q
 ```
-
-Expected: FAIL — `PlayerController` does not exist yet.
 
 - [ ] **Step 3: Implement PlayerController**
 
@@ -498,7 +580,6 @@ import com.ragnarok.api.dto.response.PlayerResponseDTO;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
-import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
@@ -512,26 +593,22 @@ import java.util.List;
 @Tag(name = "Players", description = "Player management")
 public class PlayerController {
 
-    private final PlayerRepository playerRepository;
     private final PlayerService playerService;
 
-    public PlayerController(PlayerRepository playerRepository, PlayerService playerService) {
-        this.playerRepository = playerRepository;
+    public PlayerController(PlayerService playerService) {
         this.playerService = playerService;
     }
 
     @GetMapping
     @Operation(summary = "List all players")
     public List<PlayerResponseDTO> listPlayers() {
-        return playerRepository.findAll().stream().map(this::toDTO).toList();
+        return playerService.listarPersonagens().stream().map(this::toDTO).toList();
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get player by ID")
     public ResponseEntity<PlayerResponseDTO> getPlayer(@PathVariable Long id) {
-        return playerRepository.findById(id)
-                .map(e -> ResponseEntity.ok(toDTO(e)))
-                .orElse(ResponseEntity.notFound().build());
+        return ResponseEntity.ok(toDTO(playerService.buscarPersonagem(id)));
     }
 
     @PostMapping
@@ -539,15 +616,12 @@ public class PlayerController {
     public ResponseEntity<PlayerResponseDTO> createPlayer(@RequestBody CreatePlayerRequestDTO req) {
         Player created = playerService.criarNovoPersonagem(req.name(), req.jobClass());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new PlayerResponseDTO(created.getId(), created.getName(),
-                        created.getJobClass(), created.getBaseLevel(), created.getJobLevel(),
-                        created.getHpCurrent(), created.getHpMax(), created.getSpCurrent(), created.getSpMax(),
-                        created.getStats() != null ? created.getStats().str() : null,
-                        created.getStats() != null ? created.getStats().agi() : null,
-                        created.getStats() != null ? created.getStats().vit() : null,
-                        created.getStats() != null ? created.getStats().intelligence() : null,
-                        created.getStats() != null ? created.getStats().dex() : null,
-                        created.getStats() != null ? created.getStats().luk() : null,
+                .body(new PlayerResponseDTO(
+                        created.getId(), created.getName(), created.getJobClass(),
+                        created.getBaseLevel(), created.getJobLevel(),
+                        created.getHpCurrent(), created.getHpMax(),
+                        created.getSpCurrent(), created.getSpMax(),
+                        null, null, null, null, null, null,
                         null, null, created.getZenny(), null));
     }
 
@@ -560,13 +634,12 @@ public class PlayerController {
                 e.getStr(), e.getAgi(), e.getVit(), e.getIntelligence(),
                 e.getDex(), e.getLuk(),
                 e.getStatPoints(), e.getSkillPoints(),
-                e.getZenny(), e.getMapName()
-        );
+                e.getZenny(), e.getMapName());
     }
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run test — expect PASS**
 
 ```bash
 ./mvnw test -Dtest=PlayerControllerTest -q
@@ -579,7 +652,7 @@ Expected: `Tests run: 4, Failures: 0, Errors: 0`.
 ```bash
 git add src/main/java/com/ragnarok/api/controller/PlayerController.java \
         src/test/java/com/ragnarok/api/controller/PlayerControllerTest.java
-git commit -m "feat(api): add PlayerController with GET /api/players and POST /api/players"
+git commit -m "feat(api): add PlayerController"
 ```
 
 ---
@@ -597,6 +670,7 @@ git commit -m "feat(api): add PlayerController with GET /api/players and POST /a
 package com.ragnarok.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.AttackRequestDTO;
 import com.ragnarok.application.service.BattleService;
 import com.ragnarok.domain.exception.PlayerDeadException;
@@ -604,6 +678,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -612,6 +687,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(BattleController.class)
+@Import(GlobalExceptionHandler.class)
 class BattleControllerTest {
 
     @Autowired MockMvc mvc;
@@ -706,7 +782,7 @@ Expected: `Tests run: 3, Failures: 0, Errors: 0`.
 ```bash
 git add src/main/java/com/ragnarok/api/controller/BattleController.java \
         src/test/java/com/ragnarok/api/controller/BattleControllerTest.java
-git commit -m "feat(api): add BattleController with POST /api/battle/attack"
+git commit -m "feat(api): add BattleController"
 ```
 
 ---
@@ -724,6 +800,7 @@ git commit -m "feat(api): add BattleController with POST /api/battle/attack"
 package com.ragnarok.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.UseSkillRequestDTO;
 import com.ragnarok.application.dto.SkillRowDTO;
 import com.ragnarok.application.service.SkillCombatService;
@@ -733,6 +810,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -743,6 +821,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(SkillController.class)
+@Import(GlobalExceptionHandler.class)
 class SkillControllerTest {
 
     @Autowired MockMvc mvc;
@@ -777,7 +856,8 @@ class SkillControllerTest {
         mvc.perform(post("/api/players/1/skills/SM_BASH/use")
                .contentType(MediaType.APPLICATION_JSON)
                .content(objectMapper.writeValueAsString(new UseSkillRequestDTO(2L))))
-           .andExpect(status().isBadRequest());
+           .andExpect(status().isBadRequest())
+           .andExpect(jsonPath("$.error").exists());
     }
 }
 ```
@@ -823,16 +903,14 @@ public class SkillController {
     @GetMapping
     @Operation(summary = "List all skills available to the player")
     public List<SkillRowResponseDTO> listSkills(@PathVariable Long playerId) {
-        return skillService.listarSkillsDoPlayer(playerId).stream()
-                .map(this::toDTO).toList();
+        return skillService.listarSkillsDoPlayer(playerId).stream().map(this::toDTO).toList();
     }
 
     @PostMapping("/{skillName}/learn")
     @Operation(summary = "Learn or level up a skill")
     public ResponseEntity<SkillUseResponseDTO> learnSkill(
             @PathVariable Long playerId, @PathVariable String skillName) {
-        String result = skillService.aprenderSkill(playerId, skillName);
-        return ResponseEntity.ok(new SkillUseResponseDTO(result));
+        return ResponseEntity.ok(new SkillUseResponseDTO(skillService.aprenderSkill(playerId, skillName)));
     }
 
     @PostMapping("/{skillName}/use")
@@ -879,21 +957,22 @@ git commit -m "feat(api): add SkillController"
 - Create: `src/test/java/com/ragnarok/api/controller/ItemControllerTest.java`
 - Create: `src/test/java/com/ragnarok/api/controller/MapControllerTest.java`
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Write ItemControllerTest**
 
 `src/test/java/com/ragnarok/api/controller/ItemControllerTest.java`:
 ```java
 package com.ragnarok.api.controller;
 
+import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.application.service.ItemService;
 import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.infrastructure.persistence.ItemEntity;
 import com.ragnarok.infrastructure.persistence.PlayerItemEntity;
-import com.ragnarok.infrastructure.persistence.PlayerItemRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -904,10 +983,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(ItemController.class)
+@Import(GlobalExceptionHandler.class)
 class ItemControllerTest {
 
     @Autowired MockMvc mvc;
-    @MockBean PlayerItemRepository playerItemRepository;
     @MockBean ItemService itemService;
 
     @Test
@@ -923,7 +1002,7 @@ class ItemControllerTest {
         pi.setAmount(3);
         pi.setEquipped(false);
 
-        when(playerItemRepository.findByPlayerId(1L)).thenReturn(List.of(pi));
+        when(itemService.listarInventario(1L)).thenReturn(List.of(pi));
 
         mvc.perform(get("/api/players/1/inventory"))
            .andExpect(status().isOk())
@@ -943,18 +1022,22 @@ class ItemControllerTest {
 }
 ```
 
+- [ ] **Step 2: Write MapControllerTest**
+
 `src/test/java/com/ragnarok/api/controller/MapControllerTest.java`:
 ```java
 package com.ragnarok.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.TravelRequestDTO;
+import com.ragnarok.api.dto.response.WalkResponseDTO;
 import com.ragnarok.application.service.MapService;
-import com.ragnarok.infrastructure.persistence.MonsterEntity;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -965,6 +1048,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(MapController.class)
+@Import(GlobalExceptionHandler.class)
 class MapControllerTest {
 
     @Autowired MockMvc mvc;
@@ -983,12 +1067,18 @@ class MapControllerTest {
     }
 
     @Test
+    void getPortals_returnsList() throws Exception {
+        when(mapService.getPortals("prontera")).thenReturn(List.of("izlude", "geffen"));
+
+        mvc.perform(get("/api/maps/prontera/portals"))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$[0]").value("izlude"));
+    }
+
+    @Test
     void walk_encounterOccurred_returnsMonsterInfo() throws Exception {
-        MonsterEntity monster = new MonsterEntity();
-        monster.setId(1002L);
-        monster.setName("Poring");
-        monster.setHp(55);
-        when(mapService.walk(1L)).thenReturn(monster);
+        WalkResponseDTO walkResult = new WalkResponseDTO(true, 1002L, "Poring", 55, "PORING APARECEU!");
+        when(mapService.walk(1L)).thenReturn(walkResult);
 
         mvc.perform(post("/api/players/1/map/walk"))
            .andExpect(status().isOk())
@@ -998,7 +1088,8 @@ class MapControllerTest {
 
     @Test
     void walk_noEncounter_returnsEncounterFalse() throws Exception {
-        when(mapService.walk(1L)).thenReturn(null);
+        WalkResponseDTO walkResult = new WalkResponseDTO(false, null, null, null, "Nenhum monstro.");
+        when(mapService.walk(1L)).thenReturn(walkResult);
 
         mvc.perform(post("/api/players/1/map/walk"))
            .andExpect(status().isOk())
@@ -1015,13 +1106,13 @@ class MapControllerTest {
 }
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [ ] **Step 3: Run tests — expect FAIL**
 
 ```bash
 ./mvnw test -Dtest=ItemControllerTest,MapControllerTest -q
 ```
 
-- [ ] **Step 3: Implement ItemController**
+- [ ] **Step 4: Implement ItemController**
 
 `src/main/java/com/ragnarok/api/controller/ItemController.java`:
 ```java
@@ -1031,7 +1122,6 @@ import com.ragnarok.api.dto.response.InventoryItemResponseDTO;
 import com.ragnarok.api.dto.response.SkillUseResponseDTO;
 import com.ragnarok.application.service.ItemService;
 import com.ragnarok.infrastructure.persistence.PlayerItemEntity;
-import com.ragnarok.infrastructure.persistence.PlayerItemRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -1041,31 +1131,26 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/players/{playerId}/inventory")
 @Tag(name = "Inventory", description = "Player inventory management")
 public class ItemController {
 
-    private final PlayerItemRepository playerItemRepository;
     private final ItemService itemService;
 
-    public ItemController(PlayerItemRepository playerItemRepository, ItemService itemService) {
-        this.playerItemRepository = playerItemRepository;
+    public ItemController(ItemService itemService) {
         this.itemService = itemService;
     }
 
-    @GetMapping
+    @GetMapping("/api/players/{playerId}/inventory")
     @Operation(summary = "List player inventory")
     public List<InventoryItemResponseDTO> getInventory(@PathVariable Long playerId) {
-        return playerItemRepository.findByPlayerId(playerId).stream()
-                .map(this::toDTO).toList();
+        return itemService.listarInventario(playerId).stream().map(this::toDTO).toList();
     }
 
-    @PostMapping("/{itemId}/use")
+    @PostMapping("/api/players/{playerId}/inventory/{itemId}/use")
     @Operation(summary = "Use an item from inventory")
     public ResponseEntity<SkillUseResponseDTO> useItem(
             @PathVariable Long playerId, @PathVariable UUID itemId) {
-        String result = itemService.usarItem(itemId);
-        return ResponseEntity.ok(new SkillUseResponseDTO(result));
+        return ResponseEntity.ok(new SkillUseResponseDTO(itemService.usarItem(itemId)));
     }
 
     private InventoryItemResponseDTO toDTO(PlayerItemEntity pi) {
@@ -1075,13 +1160,12 @@ public class ItemController {
                 pi.getItem() != null && pi.getItem().getType() != null
                         ? pi.getItem().getType().name() : "UNKNOWN",
                 pi.getAmount(),
-                pi.getEquipped()
-        );
+                pi.getEquipped());
     }
 }
 ```
 
-- [ ] **Step 4: Implement MapController**
+- [ ] **Step 5: Implement MapController**
 
 `src/main/java/com/ragnarok/api/controller/MapController.java`:
 ```java
@@ -1091,14 +1175,14 @@ import com.ragnarok.api.dto.request.TravelRequestDTO;
 import com.ragnarok.api.dto.response.MapInfoResponseDTO;
 import com.ragnarok.api.dto.response.WalkResponseDTO;
 import com.ragnarok.application.service.MapService;
-import com.ragnarok.infrastructure.persistence.MonsterEntity;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
-@RequestMapping("/api/players/{playerId}/map")
 @Tag(name = "Map", description = "World navigation")
 public class MapController {
 
@@ -1108,25 +1192,26 @@ public class MapController {
         this.mapService = mapService;
     }
 
-    @GetMapping
+    @GetMapping("/api/players/{playerId}/map")
     @Operation(summary = "Get current map and available portals")
     public MapInfoResponseDTO getMapInfo(@PathVariable Long playerId) {
         String map = mapService.getCurrentMap(playerId);
         return new MapInfoResponseDTO(map, mapService.getPortals(map));
     }
 
-    @PostMapping("/walk")
-    @Operation(summary = "Walk in the current map — may trigger a monster encounter (70% chance)")
-    public ResponseEntity<WalkResponseDTO> walk(@PathVariable Long playerId) {
-        MonsterEntity monster = mapService.walk(playerId);
-        if (monster == null) {
-            return ResponseEntity.ok(new WalkResponseDTO(false, null, null, null, "No encounter."));
-        }
-        return ResponseEntity.ok(new WalkResponseDTO(true, monster.getId(),
-                monster.getName(), monster.getHp(), monster.getName() + " appeared!"));
+    @GetMapping("/api/maps/{mapId}/portals")
+    @Operation(summary = "List portals available from a specific map")
+    public List<String> getPortals(@PathVariable String mapId) {
+        return mapService.getPortals(mapId);
     }
 
-    @PostMapping("/travel")
+    @PostMapping("/api/players/{playerId}/map/walk")
+    @Operation(summary = "Walk in the current map — 70% chance of monster encounter")
+    public ResponseEntity<WalkResponseDTO> walk(@PathVariable Long playerId) {
+        return ResponseEntity.ok(mapService.walk(playerId));
+    }
+
+    @PostMapping("/api/players/{playerId}/map/travel")
     @Operation(summary = "Travel to another map via portal")
     public ResponseEntity<Void> travel(@PathVariable Long playerId, @RequestBody TravelRequestDTO req) {
         mapService.travel(playerId, req.destination());
@@ -1135,23 +1220,23 @@ public class MapController {
 }
 ```
 
-- [ ] **Step 5: Run all tests — expect PASS**
+- [ ] **Step 6: Run tests — expect PASS**
 
 ```bash
 ./mvnw test -Dtest=ItemControllerTest,MapControllerTest -q
 ```
 
-Expected: `Tests run: 6, Failures: 0, Errors: 0`.
+Expected: `Tests run: 7, Failures: 0, Errors: 0`.
 
-- [ ] **Step 6: Run full test suite**
+- [ ] **Step 7: Run full test suite**
 
 ```bash
 ./mvnw test -q
 ```
 
-Expected: `BUILD SUCCESS` — all 212+ tests pass.
+Expected: `BUILD SUCCESS` — all tests pass.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/main/java/com/ragnarok/api/controller/ \
@@ -1163,15 +1248,15 @@ git commit -m "feat(api): add ItemController and MapController — REST API comp
 
 ## Task 8: Final verification
 
-- [ ] **Step 1: Start application and verify Swagger UI**
+- [ ] **Step 1: Start application and open Swagger UI**
 
 ```bash
 java -jar target/ragnarok-core-0.0.1-SNAPSHOT.jar
 ```
 
-Open browser: `http://localhost:8080/swagger-ui.html`
+Open: `http://localhost:8080/swagger-ui.html`
 
-Expected: Swagger UI shows 5 controller groups (Players, Battle, Skills, Inventory, Map) with all endpoints listed.
+Expected: Swagger UI shows 5 groups — Players, Battle, Skills, Inventory, Map — with all endpoints listed and executable via "Try it out".
 
 - [ ] **Step 2: Run full test suite with coverage**
 
@@ -1179,11 +1264,11 @@ Expected: Swagger UI shows 5 controller groups (Players, Battle, Skills, Invento
 ./mvnw test -q
 ```
 
-Expected: `BUILD SUCCESS`, JaCoCo ≥ 85% line, ≥ 62% branch.
+Expected: `BUILD SUCCESS`, JaCoCo ≥ 85% line / ≥ 62% branch.
 
 - [ ] **Step 3: Final commit**
 
 ```bash
 git add .
-git commit -m "feat(api): REST API + Swagger UI complete — all endpoints exposed"
+git commit -m "feat(api): REST API + Swagger UI complete"
 ```

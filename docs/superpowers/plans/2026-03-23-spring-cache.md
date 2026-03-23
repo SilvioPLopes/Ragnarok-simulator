@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Cache static game data (weapon size modifiers, skill buff effects, player skill lists) using Caffeine to eliminate repeated database queries during battle turns.
+**Goal:** Cache static game data (weapon size modifiers, skill buff effects, skill tree, player skill lists) using Caffeine to eliminate repeated database queries during battle turns.
 
-**Architecture:** Add `@EnableCaching` to the application entry point, create `CacheConfig` with named Caffeine caches, and annotate specific service methods with `@Cacheable` / `@CacheEvict`. Static tables (weapon_size_modifiers, skill_buff_effects) use infinite TTL. Player-specific skill data uses 5-minute TTL and is evicted on `aprenderSkill()`.
+**Architecture:** Add `@EnableCaching` to the application entry point, create `CacheConfig` with named Caffeine caches via `SimpleCacheManager` + `CaffeineCache`, and annotate specific service methods with `@Cacheable` / `@CacheEvict`. Static tables (weapon_size_modifiers, skill_buff_effects, skill tree) use infinite TTL. Player-specific skill data uses 5-minute TTL and is evicted on `aprenderSkill()`.
 
 **Tech Stack:** Spring Cache abstraction, Caffeine (version managed by Spring Boot BOM).
 
@@ -20,6 +20,7 @@
 | Modify | `src/main/java/com/ragnarok/application/service/WeaponSizeService.java` |
 | Modify | `src/main/java/com/ragnarok/application/service/SkillService.java` |
 | Modify | `src/main/java/com/ragnarok/infrastructure/persistence/SkillBuffEffectRepository.java` |
+| Modify | `src/main/java/com/ragnarok/infrastructure/persistence/SkillTreeRepository.java` |
 | Create | `src/test/java/com/ragnarok/application/service/CacheVerificationTest.java` |
 
 ---
@@ -43,24 +44,13 @@ Inside `<dependencies>` in `pom.xml` (no version — managed by Spring Boot BOM)
 
 - [ ] **Step 2: Add @EnableCaching to application entry point**
 
-Read `src/main/java/com/ragnarok/RagnarokCoreApplication.java` first, then add `@EnableCaching`:
+Read `src/main/java/com/ragnarok/RagnarokCoreApplication.java` first. Then add **only** `@EnableCaching` and its import — preserve all existing annotations unchanged:
 
 ```java
-package com.ragnarok;
-
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cloud.openfeign.EnableFeignClients;
 
-@SpringBootApplication
-@EnableFeignClients
+// Add to the class-level annotations — keep all existing annotations:
 @EnableCaching
-public class RagnarokCoreApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(RagnarokCoreApplication.class, args);
-    }
-}
 ```
 
 - [ ] **Step 3: Verify compilation**
@@ -85,11 +75,9 @@ git commit -m "build: add Caffeine and enable Spring Cache"
 **Files:**
 - Create: `src/main/java/com/ragnarok/infrastructure/config/CacheConfig.java`
 
-- [ ] **Step 1: Write failing test for cache config**
+`SimpleCacheManager` with individual `CaffeineCache` instances is used here — **not** `CaffeineCacheManager.setCacheLoader()`, which has a different type signature (it takes a Caffeine `CacheLoader` for loading values, not per-cache configuration). `SimpleCacheManager` + `CaffeineCache` is the correct approach for named caches with different TTL settings.
 
-We'll verify the cache config exists by checking caches are registered in the cache manager. This test goes in `CacheVerificationTest` (written in Task 4). Skip for now — proceed to implementation.
-
-- [ ] **Step 2: Create CacheConfig**
+- [ ] **Step 1: Create CacheConfig**
 
 `src/main/java/com/ragnarok/infrastructure/config/CacheConfig.java`:
 ```java
@@ -97,11 +85,12 @@ package com.ragnarok.infrastructure.config;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.caffeine.CaffeineCacheManager;
+import org.springframework.cache.caffeine.CaffeineCache;
+import org.springframework.cache.support.SimpleCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Configuration
@@ -110,31 +99,33 @@ public class CacheConfig {
     /**
      * Named caches with their expiry policies.
      *
-     * Static game tables (weapon size modifiers, skill tree data, buff effects)
-     * never change at runtime — use infinite TTL.
+     * Static game tables (weapon size modifiers, skill buff effects, skill tree)
+     * never change at runtime — no TTL, bounded size.
      *
      * Player-specific data (learned skills) changes when a skill is learned —
-     * use 5-minute TTL as a safety net, with explicit eviction on aprenderSkill().
+     * 5-minute TTL as a safety net, with explicit eviction on aprenderSkill().
      */
     @Bean
     public CacheManager cacheManager() {
-        CaffeineCacheManager manager = new CaffeineCacheManager();
-        manager.setCacheLoader(cacheName -> {
-            Caffeine<Object, Object> builder = Caffeine.newBuilder().recordStats();
-            if ("playerSkills".equals(cacheName)) {
-                builder.expireAfterWrite(5, TimeUnit.MINUTES).maximumSize(500);
-            } else {
-                // Static data: no expiry, bounded size
-                builder.maximumSize(1000);
-            }
-            return builder.build();
-        });
-        manager.setCacheNames(java.util.List.of(
-                "weaponSizeModifiers",
-                "skillBuffEffects",
-                "playerSkills"
+        SimpleCacheManager manager = new SimpleCacheManager();
+        manager.setCaches(List.of(
+                buildCache("weaponSizeModifiers",
+                        Caffeine.newBuilder().maximumSize(1000).recordStats()),
+                buildCache("skillBuffEffects",
+                        Caffeine.newBuilder().maximumSize(1000).recordStats()),
+                buildCache("skillTree",
+                        Caffeine.newBuilder().maximumSize(100).recordStats()),
+                buildCache("playerSkills",
+                        Caffeine.newBuilder()
+                                .expireAfterWrite(5, TimeUnit.MINUTES)
+                                .maximumSize(500)
+                                .recordStats())
         ));
         return manager;
+    }
+
+    private CaffeineCache buildCache(String name, Caffeine<Object, Object> caffeine) {
+        return new CaffeineCache(name, caffeine.build());
     }
 }
 ```
@@ -142,9 +133,10 @@ public class CacheConfig {
 **Cache names:**
 - `weaponSizeModifiers` — results of `WeaponSizeService.getModifier()` — static, no TTL
 - `skillBuffEffects` — results of `SkillBuffEffectRepository.findBySkillId()` — static, no TTL
+- `skillTree` — results of the skill tree query in `SkillService` — static, no TTL
 - `playerSkills` — results of `SkillService.listarSkillsDoPlayer()` — 5 min TTL, evicted on learn
 
-- [ ] **Step 3: Verify compilation**
+- [ ] **Step 2: Verify compilation**
 
 ```bash
 ./mvnw compile -q
@@ -152,7 +144,7 @@ public class CacheConfig {
 
 Expected: `BUILD SUCCESS`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add src/main/java/com/ragnarok/infrastructure/config/CacheConfig.java
@@ -167,6 +159,7 @@ git commit -m "feat(cache): add CacheConfig with Caffeine named caches"
 - Modify: `src/main/java/com/ragnarok/application/service/WeaponSizeService.java`
 - Modify: `src/main/java/com/ragnarok/application/service/SkillService.java`
 - Modify: `src/main/java/com/ragnarok/infrastructure/persistence/SkillBuffEffectRepository.java`
+- Modify: `src/main/java/com/ragnarok/infrastructure/persistence/SkillTreeRepository.java`
 
 - [ ] **Step 1: Annotate WeaponSizeService.getModifier()**
 
@@ -184,9 +177,11 @@ public int getModifier(WeaponType weaponType, String monsterSize) {
 }
 ```
 
-- [ ] **Step 2: Annotate SkillService.listarSkillsDoPlayer() and aprenderSkill()**
+- [ ] **Step 2: Annotate SkillService — skill list and skill learn**
 
-Read the current file first. Then add `@Cacheable` and `@CacheEvict`:
+Read `src/main/java/com/ragnarok/application/service/SkillService.java` fully first.
+
+Add these two annotations:
 
 ```java
 import org.springframework.cache.annotation.CacheEvict;
@@ -198,7 +193,7 @@ public List<SkillRowDTO> listarSkillsDoPlayer(Long playerId) {
     // existing implementation unchanged
 }
 
-// aprenderSkill — evict the cache for this player after learning:
+// aprenderSkill — evict the player's cached skill list after learning:
 @Transactional
 @CacheEvict(value = "playerSkills", key = "#playerId")
 public String aprenderSkill(Long playerId, String aegisName) {
@@ -206,11 +201,27 @@ public String aprenderSkill(Long playerId, String aegisName) {
 }
 ```
 
-**Note:** `listarSkillsUsaveisForaDeCombate()` is deliberately NOT cached — it is called infrequently (out-of-combat skill menu only) and adding a second cache would require a second `@CacheEvict` on `aprenderSkill()` with a different key structure. Not worth the complexity.
+**Note:** `listarSkillsUsaveisForaDeCombate()` is deliberately NOT cached — it is called infrequently (out-of-combat skill menu only) and filtering logic changes with player state.
 
-- [ ] **Step 3: Annotate SkillBuffEffectRepository.findBySkillId()**
+- [ ] **Step 3: Annotate SkillTreeRepository.findByJobClassesIn()**
 
-Read `src/main/java/com/ragnarok/infrastructure/persistence/SkillBuffEffectRepository.java`. It is a Spring Data interface. Add `@Cacheable` directly to the method declaration:
+The skill tree data is static game configuration loaded from rAthena. It is queried via `SkillTreeRepository.findByJobClassesIn(List<String>)` in `SkillService`. Cache it at the repository layer so it is served from Caffeine on every repeated call regardless of which service calls it.
+
+```java
+import org.springframework.cache.annotation.Cacheable;
+
+// Add to SkillTreeRepository interface:
+@Cacheable("skillTree")
+List<SkillTreeEntity> findByJobClassesIn(@Param("upperJobClasses") List<String> upperJobClasses);
+```
+
+The cache key defaults to the `upperJobClasses` list. Caffeine uses in-memory storage so `List<String>` keys work without serialization. The `smallPct`, `mediumPct`, `largePct` columns are read-only game data — no eviction needed.
+
+- [ ] **Step 4: Annotate SkillBuffEffectRepository.findBySkillId()**
+
+Read `src/main/java/com/ragnarok/infrastructure/persistence/SkillBuffEffectRepository.java`. It is a Spring Data interface. Add `@Cacheable` directly to the method declaration.
+
+**Why the repository (not SkillCombatService):** The spec mentions `SkillCombatService` buff lookup as the cache target, but annotating the repository is equivalent and superior — it caches the result for any future caller, not just `SkillCombatService`.
 
 ```java
 import org.springframework.cache.annotation.Cacheable;
@@ -225,7 +236,7 @@ public interface SkillBuffEffectRepository extends JpaRepository<SkillBuffEffect
 
 Spring Data's proxy infrastructure is compatible with Spring Cache. The first call for a given `skillId` hits the database; subsequent calls return from the Caffeine cache.
 
-- [ ] **Step 4: Verify compilation**
+- [ ] **Step 5: Verify compilation**
 
 ```bash
 ./mvnw compile -q
@@ -233,12 +244,13 @@ Spring Data's proxy infrastructure is compatible with Spring Cache. The first ca
 
 Expected: `BUILD SUCCESS`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/main/java/com/ragnarok/application/service/WeaponSizeService.java \
         src/main/java/com/ragnarok/application/service/SkillService.java \
-        src/main/java/com/ragnarok/infrastructure/persistence/SkillBuffEffectRepository.java
+        src/main/java/com/ragnarok/infrastructure/persistence/SkillBuffEffectRepository.java \
+        src/main/java/com/ragnarok/infrastructure/persistence/SkillTreeRepository.java
 git commit -m "feat(cache): annotate services with @Cacheable and @CacheEvict"
 ```
 
@@ -251,7 +263,19 @@ git commit -m "feat(cache): annotate services with @Cacheable and @CacheEvict"
 
 This test verifies that a second call to `WeaponSizeService.getModifier()` does NOT trigger an additional database query — proving the cache is working.
 
-- [ ] **Step 1: Write the test**
+The test seeds the `weapon_size_modifiers` table in `@BeforeEach` to ensure deterministic behavior. Without seeded data, `getModifier()` falls through to `defaultModifier()` without calling `findByWeaponType()`, making the call-count assertion meaningless.
+
+- [ ] **Step 1: Confirm entity structure (already verified during plan authoring)**
+
+`WeaponSizeModifierEntity` has these fields (verified from the source):
+- `weaponType` (String, @Id) — e.g., `"SWORD"`, `"BOW"`, `"NONE"`
+- `smallPct` (int) — modifier for Small monsters
+- `mediumPct` (int) — modifier for Medium monsters
+- `largePct` (int) — modifier for Large monsters
+
+`WeaponSizeService.getModifier()` calls `repository.findByWeaponType(weaponType.name())` and picks from `smallPct`/`mediumPct`/`largePct` based on the size string.
+
+- [ ] **Step 2: Write the test**
 
 `src/test/java/com/ragnarok/application/service/CacheVerificationTest.java`:
 ```java
@@ -259,13 +283,17 @@ package com.ragnarok.application.service;
 
 import com.ragnarok.AbstractIntegrationTest;
 import com.ragnarok.domain.model.WeaponType;
+import com.ragnarok.infrastructure.persistence.WeaponSizeModifierEntity;
 import com.ragnarok.infrastructure.persistence.WeaponSizeModifierRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.cache.CacheManager;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -274,7 +302,7 @@ import static org.mockito.Mockito.verify;
  * for static game data.
  *
  * Uses @SpyBean to count actual repository invocations.
- * AbstractIntegrationTest provides the Testcontainers PostgreSQL and @MockBean for the terminal.
+ * Seeds the database in @BeforeEach for deterministic call-count assertions.
  */
 class CacheVerificationTest extends AbstractIntegrationTest {
 
@@ -285,38 +313,66 @@ class CacheVerificationTest extends AbstractIntegrationTest {
     WeaponSizeModifierRepository weaponSizeModifierRepository;
 
     @Autowired
+    WeaponSizeModifierRepository weaponSizeModifierRepositoryDirect;
+
+    @Autowired
     CacheManager cacheManager;
 
-    @Test
-    @DisplayName("Cache: getModifier() deve consultar o banco apenas na primeira chamada")
-    void getModifier_shouldHitDatabaseOnlyOnce() {
-        // Evict to ensure clean state
+    @BeforeEach
+    void setUp() {
+        // Clear cache before each test to ensure clean state
         cacheManager.getCache("weaponSizeModifiers").clear();
 
-        // First call — should hit the database
-        weaponSizeService.getModifier(WeaponType.SWORD, "Medium");
-        // Second call with same args — should be served from cache
-        weaponSizeService.getModifier(WeaponType.SWORD, "Medium");
-        // Third call with different args — cache miss, should hit database again
-        weaponSizeService.getModifier(WeaponType.BOW, "Small");
-
-        // Repository should have been called exactly twice (first + third calls)
-        verify(weaponSizeModifierRepository, times(2)).findByWeaponType(org.mockito.ArgumentMatchers.anyString());
+        // Seed the table so findByWeaponType is actually called (not short-circuited to default).
+        // WeaponSizeModifierEntity uses @AllArgsConstructor: (weaponType, smallPct, mediumPct, largePct)
+        if (weaponSizeModifierRepositoryDirect.count() == 0) {
+            weaponSizeModifierRepositoryDirect.save(
+                    new WeaponSizeModifierEntity("SWORD", 75, 100, 75));
+        }
     }
 
     @Test
-    @DisplayName("Cache: cache manager deve ter os caches configurados")
+    @DisplayName("Cache: getModifier() should query the database only on the first call")
+    void getModifier_shouldHitDatabaseOnlyOnce() {
+        // First call — cache miss, hits the database
+        weaponSizeService.getModifier(WeaponType.SWORD, "Medium");
+        // Second call with same args — cache hit, no database call
+        weaponSizeService.getModifier(WeaponType.SWORD, "Medium");
+
+        // Repository should have been called exactly once (only the first call)
+        verify(weaponSizeModifierRepository, times(1)).findByWeaponType("SWORD");
+    }
+
+    @Test
+    @DisplayName("Cache: cache manager should have all expected caches configured")
     void cacheManager_shouldHaveExpectedCaches() {
-        org.junit.jupiter.api.Assertions.assertNotNull(cacheManager.getCache("weaponSizeModifiers"));
-        org.junit.jupiter.api.Assertions.assertNotNull(cacheManager.getCache("skillBuffEffects"));
-        org.junit.jupiter.api.Assertions.assertNotNull(cacheManager.getCache("playerSkills"));
+        assertNotNull(cacheManager.getCache("weaponSizeModifiers"));
+        assertNotNull(cacheManager.getCache("skillBuffEffects"));
+        assertNotNull(cacheManager.getCache("skillTree"));
+        assertNotNull(cacheManager.getCache("playerSkills"));
     }
 }
 ```
 
-**Note:** `AbstractIntegrationTest` requires Docker for Testcontainers. If Testcontainers is not yet implemented (running this plan in isolation), use a `@SpringBootTest` + `@ActiveProfiles("test")` setup with a local PostgreSQL instead, and remove the `extends AbstractIntegrationTest`.
+**Note on AbstractIntegrationTest dependency:** This test extends `AbstractIntegrationTest` from the Testcontainers plan (Feature B). If Feature B has not yet been implemented and `AbstractIntegrationTest` does not exist, use this standalone alternative instead:
 
-- [ ] **Step 2: Run the test**
+```java
+// Replace: class CacheVerificationTest extends AbstractIntegrationTest {
+// With:
+@SpringBootTest
+@ActiveProfiles("test")
+class CacheVerificationTest {
+
+    @MockBean
+    @SuppressWarnings("unused")
+    com.ragnarok.runner.RagnarokTerminalRunner ragnarokTerminalRunner;
+    // ... rest of the class unchanged
+}
+```
+
+This requires a local PostgreSQL on `localhost:5432` with the `ragnarok_test` database. Once Feature B is complete, switch back to `extends AbstractIntegrationTest`.
+
+- [ ] **Step 3: Run the test**
 
 ```bash
 ./mvnw test -Dtest=CacheVerificationTest -q
@@ -324,29 +380,17 @@ class CacheVerificationTest extends AbstractIntegrationTest {
 
 Expected: `Tests run: 2, Failures: 0, Errors: 0`.
 
-If `weaponSizeModifierRepository` has no data, `getModifier()` falls back to `defaultModifier()` without hitting `findByWeaponType()`. In that case, `verify(..., times(0))` — adjust to `times(0)` if the table is empty in the test container.
+If `findByWeaponType` is called 0 times instead of 1, the seed data lookup key doesn't match — check the `WeaponType` enum name used as the string key in `findByWeaponType`.
 
-To ensure data exists, the `StartupDataLoader` normally populates it. In tests, `StartupDataLoader` is `@Profile("!test")` and excluded. You can seed the table manually in `@BeforeEach` or verify times(0) for empty table.
-
-Alternative simpler assertion:
-
-```java
-// If table is empty, fallback is used — no DB call:
-verify(weaponSizeModifierRepository, times(1)).findByWeaponType("SWORD");
-// Second call: from cache
-weaponSizeService.getModifier(WeaponType.SWORD, "Medium");
-verify(weaponSizeModifierRepository, times(1)).findByWeaponType("SWORD"); // still 1
-```
-
-- [ ] **Step 3: Run full test suite**
+- [ ] **Step 4: Run full test suite**
 
 ```bash
 ./mvnw test -q
 ```
 
-Expected: `BUILD SUCCESS` — all tests pass including existing integration tests.
+Expected: `BUILD SUCCESS`, all tests pass.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add src/test/java/com/ragnarok/application/service/CacheVerificationTest.java
@@ -365,17 +409,7 @@ git commit -m "test(cache): add CacheVerificationTest — verifies cache prevent
 
 Expected: `BUILD SUCCESS`, JaCoCo ≥ 85% line / ≥ 62% branch.
 
-- [ ] **Step 2: Verify application starts with cache enabled**
-
-```bash
-./mvnw spring-boot:run &
-sleep 10
-curl -s http://localhost:8080/actuator/health | grep -q "UP" && echo "OK"
-```
-
-Or simply start with `java -jar target/*.jar` and confirm no errors related to caching in the startup log.
-
-- [ ] **Step 3: Final commit**
+- [ ] **Step 2: Final commit**
 
 ```bash
 git add .
