@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -44,6 +45,7 @@ public class BattleEventHandler {
     }
 
     @EventListener
+    @Transactional
     public void onMonsterKilled(MonsterKilledEvent event) {
         PlayerEntity playerEntity = playerRepository.findById(event.playerId())
                 .orElseThrow(() -> new IllegalArgumentException("Player not found: " + event.playerId()));
@@ -105,6 +107,7 @@ public class BattleEventHandler {
     }
 
     @EventListener
+    @Transactional
     public void onPlayerDied(PlayerDiedEvent event) {
         PlayerEntity playerEntity = playerRepository.findById(event.playerId())
                 .orElseThrow(() -> new IllegalArgumentException("Player not found: " + event.playerId()));

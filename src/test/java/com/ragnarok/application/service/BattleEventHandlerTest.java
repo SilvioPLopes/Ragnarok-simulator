@@ -4,7 +4,9 @@ import com.ragnarok.domain.event.MonsterKilledEvent;
 import com.ragnarok.domain.event.PlayerDiedEvent;
 import com.ragnarok.domain.model.Item;
 import com.ragnarok.domain.service.LevelingService;
+import com.ragnarok.infrastructure.client.mapper.ItemMapper;
 import com.ragnarok.infrastructure.persistence.*;
+import com.ragnarok.infrastructure.persistence.ItemEntity;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +27,7 @@ class BattleEventHandlerTest {
 
     @Mock PlayerRepository playerRepository;
     @Mock PlayerItemRepository playerItemRepository;
+    @Mock ItemMapper itemMapper;
     @Mock PlayerMapper playerMapper;
     @Mock LevelingService levelingService;
     @Mock ApplicationEventPublisher eventPublisher;
@@ -63,5 +66,29 @@ class BattleEventHandlerTest {
         verify(playerRepository).save(playerEntity);
         assertEquals(200, playerEntity.getHpCurrent());
         assertEquals("prontera", playerEntity.getMapName());
+    }
+
+    @Test
+    void onMonsterKilled_withLoot_persistsNewInventoryItem() {
+        PlayerEntity playerEntity = new PlayerEntity();
+        playerEntity.setId(1L);
+        playerEntity.setHpMax(100);
+        playerEntity.setHpCurrent(80);
+
+        Item item = new Item();
+        item.setId(10L);
+
+        ItemEntity itemEntity = new ItemEntity();
+        itemEntity.setId(10L);
+
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(playerEntity));
+        when(playerMapper.toDomain(playerEntity)).thenReturn(new com.ragnarok.domain.model.Player());
+        when(levelingService.processarExperiencia(any(), anyLong(), anyLong())).thenReturn("Sem level up.");
+        when(itemMapper.toEntity(item)).thenReturn(itemEntity);
+        when(playerItemRepository.findByPlayerIdAndItemId(1L, 10L)).thenReturn(List.of());
+
+        handler.onMonsterKilled(new MonsterKilledEvent(1L, 999L, List.of(item), 40L, 20L));
+
+        verify(playerItemRepository).save(any(PlayerItemEntity.class));
     }
 }
