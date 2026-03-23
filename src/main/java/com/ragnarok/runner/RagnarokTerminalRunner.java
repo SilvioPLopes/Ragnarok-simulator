@@ -659,10 +659,6 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         inBattle = false;
         currentMonster = null;
         System.out.println("\n>>> VOCE MORREU! Ressuscitando em Prontera...");
-        playerService.ressuscitarJogador(currentPlayer.getId());
-        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow(() -> new GameException("Player not found: " + currentPlayer.getId()));
-        p.setMapName("prontera");
-        playerRepo.save(p);
         System.out.println(">>> HP restaurado. Voce esta em Prontera.\n");
     }
 }
