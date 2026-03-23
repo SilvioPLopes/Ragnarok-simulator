@@ -140,6 +140,10 @@ public class ItemService {
         return aplicarCura(player, itemEntity, temEfeitoHp ? efeitoHp : 0, temEfeitoSp ? efeitoSp : 0, nome);
     }
 
+    public List<PlayerItemEntity> listarInventario(Long playerId) {
+        return playerItemRepository.findByPlayerId(playerId);
+    }
+
     private String aplicarCura(PlayerEntity player, PlayerItemEntity itemEntity, int hpHeal, int spHeal, String nome) {
         int hpAtual = player.getHpCurrent() != null ? player.getHpCurrent() : 0;
         int hpMax   = player.getHpMax()     != null ? player.getHpMax()     : 100;
