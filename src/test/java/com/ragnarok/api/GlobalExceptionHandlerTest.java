@@ -3,6 +3,7 @@ package com.ragnarok.api;
 import com.ragnarok.application.service.BattleService;
 import com.ragnarok.api.controller.BattleController;
 import com.ragnarok.api.dto.request.AttackRequestDTO;
+import com.ragnarok.domain.exception.InsufficientSpException;
 import com.ragnarok.domain.exception.PlayerDeadException;
 import com.ragnarok.domain.exception.SkillNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,6 +59,17 @@ class GlobalExceptionHandlerTest {
                .contentType(MediaType.APPLICATION_JSON)
                .content(objectMapper.writeValueAsString(new AttackRequestDTO(1L, 2L))))
            .andExpect(status().isNotFound())
+           .andExpect(jsonPath("$.error").value("Skill SM_BASH não encontrada."));
+    }
+
+    @Test
+    void gameExceptionSubclass_returns400() throws Exception {
+        when(battleService.realizarAtaque(1L, 2L)).thenThrow(new InsufficientSpException(20, 5));
+
+        mvc.perform(post("/api/battle/attack")
+               .contentType(MediaType.APPLICATION_JSON)
+               .content(objectMapper.writeValueAsString(new AttackRequestDTO(1L, 2L))))
+           .andExpect(status().isBadRequest())
            .andExpect(jsonPath("$.error").exists());
     }
 

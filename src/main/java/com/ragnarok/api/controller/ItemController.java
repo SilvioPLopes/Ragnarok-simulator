@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
+@RequestMapping("/api/players/{playerId}/inventory")
 @Tag(name = "Inventory", description = "Player inventory management")
 public class ItemController {
 
@@ -22,13 +23,13 @@ public class ItemController {
         this.itemService = itemService;
     }
 
-    @GetMapping("/api/players/{playerId}/inventory")
+    @GetMapping
     @Operation(summary = "List player inventory")
     public List<InventoryItemResponseDTO> getInventory(@PathVariable Long playerId) {
         return itemService.listarInventario(playerId).stream().map(this::toDTO).toList();
     }
 
-    @PostMapping("/api/players/{playerId}/inventory/{itemId}/use")
+    @PostMapping("/{itemId}/use")
     @Operation(summary = "Use an item from inventory")
     public ResponseEntity<SkillUseResponseDTO> useItem(
             @PathVariable Long playerId, @PathVariable UUID itemId) {

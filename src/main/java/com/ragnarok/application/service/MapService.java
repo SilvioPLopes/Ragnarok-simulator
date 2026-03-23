@@ -62,6 +62,7 @@ public class MapService {
      * Simulates walking in the current map.
      * Returns a WalkResult with encounter result.
      */
+    @Transactional
     public WalkResult walk(Long playerId) {
         PlayerEntity player = playerRepository.findById(playerId)
                 .orElseThrow(() -> new GameException("Player not found: " + playerId));
