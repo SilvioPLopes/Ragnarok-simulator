@@ -39,6 +39,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     private Player currentPlayer;
     private MonsterEntity currentMonster;
     private boolean inBattle = false;
+    private boolean trocarPersonagem = false;
 
     public RagnarokTerminalRunner(BattleService bs, PlayerService ps, ItemService is,
                                   PlayerRepository pr, PlayerItemRepository pir,
@@ -61,13 +62,11 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         System.out.println(">>> INICIANDO RAGNAROK TERMINAL...");
-        if (!playerRepo.existsById(1L)) {
-            System.out.println("Player ID 1 nao encontrado.");
-            return;
+        while (true) {
+            if (!renderCharacterSelect()) return;
+            trocarPersonagem = false;
+            gameLoop();
         }
-        currentPlayer = new Player();
-        currentPlayer.setId(1L);
-        gameLoop();
     }
 
     private void clearScreen() {
@@ -75,8 +74,52 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         System.out.flush();
     }
 
-    private void gameLoop() {
+    private boolean renderCharacterSelect() {
         while (true) {
+            clearScreen();
+            List<PlayerEntity> players = playerRepo.findAll();
+
+            if (players.isEmpty()) {
+                System.out.println("Nenhum personagem cadastrado. Crie um personagem para jogar.");
+                return false;
+            }
+
+            System.out.println("\n=== SELECIONE SEU PERSONAGEM ===");
+            for (int i = 0; i < players.size(); i++) {
+                PlayerEntity p = players.get(i);
+                String classe = p.getJobClass() != null ? p.getJobClass() : "Novice";
+                int level    = p.getBaseLevel()  != null ? p.getBaseLevel()  : 1;
+                int hp       = p.getHpCurrent()  != null ? p.getHpCurrent()  : 0;
+                int hpMax    = p.getHpMax()       != null ? p.getHpMax()      : 0;
+                String mapa  = p.getMapName()     != null ? p.getMapName()    : "prontera";
+                System.out.printf("%d. %-12s | %-10s | Base %-3d | HP %d/%d | %s%n",
+                        (i + 1), p.getName(), classe, level, hp, hpMax, mapa);
+            }
+            System.out.println("0. Sair");
+            System.out.print("> ");
+
+            int escolha;
+            try {
+                escolha = Integer.parseInt(scanner.nextLine().trim());
+            } catch (NumberFormatException e) {
+                System.out.println("Digite apenas numeros.");
+                continue;
+            }
+
+            if (escolha == 0) return false;
+            if (escolha < 1 || escolha > players.size()) {
+                System.out.println("Opcao invalida.");
+                continue;
+            }
+
+            currentPlayer = new Player();
+            currentPlayer.setId(players.get(escolha - 1).getId());
+            return true;
+        }
+    }
+
+    private void gameLoop() {
+        while (!trocarPersonagem) {
             try {
                 if (inBattle) renderBattleMenu();
                 else renderExplorationMenu();
@@ -99,7 +142,8 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         System.out.println("3. Inventario");
         System.out.println("4. Ver Status");
         System.out.println("5. Usar Skill");
-        System.out.println("6. Sair");
+        System.out.println("6. Trocar personagem");
+        System.out.println("7. Sair");
         System.out.print("> ");
 
         String input = scanner.nextLine();
@@ -108,7 +152,11 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         else if ("3".equals(input)) renderInventoryMenu();
         else if ("4".equals(input)) renderStatusMenu();
         else if ("5".equals(input)) renderOutOfBattleSkillMenu();
-        else if ("6".equals(input)) System.exit(0);
+        else if ("6".equals(input)) {
+            inBattle = false;
+            currentMonster = null;
+            trocarPersonagem = true;
+        } else if ("7".equals(input)) System.exit(0);
     }
 
     private void renderPortaisMenu(String mapaAtual) {

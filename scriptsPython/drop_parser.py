@@ -134,15 +134,21 @@ def main():
         f.write("    id          SERIAL PRIMARY KEY,\n")
         f.write("    monster_id  BIGINT NOT NULL,\n")
         f.write("    item_id     BIGINT NOT NULL,\n")
-        f.write("    rate        INTEGER NOT NULL,\n")  # 1-10000, onde 10000=100%
+        f.write("    rate        DOUBLE PRECISION NOT NULL,\n")  # 0.0-100.0 (rAthena ÷ 100)
         f.write("    UNIQUE (monster_id, item_id)\n")
         f.write(");\n\n")
 
         if drops:
-            f.write("INSERT INTO monster_drops (monster_id, item_id, rate) VALUES\n")
+            # Normaliza escala rAthena (0-10000) → 0.0-100.0 para alinhar com BattleEngine
+            f.write("INSERT INTO monster_drops (monster_id, item_id, rate)\n")
+            f.write("SELECT t.monster_id::BIGINT, t.item_id::BIGINT, t.rate::DOUBLE PRECISION / 100.0\n")
+            f.write("FROM (VALUES\n")
             linhas = [f"  ({d['monster_id']}, {d['item_id']}, {d['rate']})" for d in drops]
             f.write(",\n".join(linhas))
-            f.write("\nON CONFLICT (monster_id, item_id) DO UPDATE SET rate = EXCLUDED.rate;\n")
+            f.write("\n) AS t(monster_id, item_id, rate)\n")
+            f.write("WHERE EXISTS (SELECT 1 FROM monsters WHERE id = t.monster_id::BIGINT)\n")
+            f.write("  AND EXISTS (SELECT 1 FROM items WHERE id = t.item_id::BIGINT)\n")
+            f.write("ON CONFLICT (monster_id, item_id) DO UPDATE SET rate = EXCLUDED.rate;\n")
 
     print("monster_drops.sql gerado")
 

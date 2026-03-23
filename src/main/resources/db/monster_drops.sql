@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS monster_drops (
 );
 
 INSERT INTO monster_drops (monster_id, item_id, rate)
-SELECT t.monster_id::BIGINT, t.item_id::BIGINT, t.rate
+SELECT t.monster_id::BIGINT, t.item_id::BIGINT, t.rate::DOUBLE PRECISION / 100.0
 FROM (VALUES
   (1001, 990, 35),
   (1001, 904, 2750),

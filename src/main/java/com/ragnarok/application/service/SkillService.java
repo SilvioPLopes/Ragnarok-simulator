@@ -1,6 +1,7 @@
 package com.ragnarok.application.service;
 
 import com.ragnarok.domain.model.*;
+import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.infrastructure.persistence.mapper.BuffSerializer;
 import com.ragnarok.infrastructure.client.mapper.MonsterMapper;
@@ -60,7 +61,10 @@ public class SkillService {
         int skillPoints = player.getSkillPoints() != null ? player.getSkillPoints() : 0;
         String jobClass = player.getJobClass();
 
-        List<SkillTreeEntity> todasLinhas = skillTreeRepository.findByJobClassIgnoreCase(jobClass);
+        List<String> classChain = resolveClassChain(jobClass);
+        if (classChain.isEmpty()) return Collections.emptyList();
+
+        List<SkillTreeEntity> todasLinhas = skillTreeRepository.findByJobClassesIn(classChain);
         if (todasLinhas.isEmpty()) return Collections.emptyList();
 
         Map<String, Integer> playerSkillLevels = playerSkillRepository.findByPlayerId(playerId)
@@ -140,8 +144,9 @@ public class SkillService {
             throw new IllegalStateException("Sem Skill Points");
         }
 
+        List<String> classChain = resolveClassChain(player.getJobClass());
         List<SkillTreeEntity> linhas = skillTreeRepository
-                .findByJobClassIgnoreCaseAndSkillId(player.getJobClass(), aegisName);
+                .findByJobClassesInAndSkillId(classChain, aegisName);
 
         if (linhas.isEmpty()) {
             throw new IllegalStateException("Skill " + aegisName + " não encontrada para a classe " + player.getJobClass());
@@ -185,6 +190,7 @@ public class SkillService {
 
         // Aplica bônus permanente de passiva imediatamente
         SkillEntity skillEntity = skillRepository.findByAegisName(aegisName).orElse(null);
+        List<String> passiveDesc = new ArrayList<>();
         if (skillEntity != null && "PASSIVE".equalsIgnoreCase(skillEntity.getEffectType())) {
             List<SkillBuffEffectEntity> passiveEffects = skillBuffEffectRepository.findBySkillId(skillEntity.getId());
             if (!passiveEffects.isEmpty()) {
@@ -195,6 +201,7 @@ public class SkillService {
                     int value = scriptInterpreter.evaluateFormula(effect.getValueFormula(), vars);
                     StatType statType = StatType.valueOf(effect.getStatType());
                     activeBuffs.add(new ActiveBuff(aegisName, statType, value, -1));
+                    passiveDesc.add(effect.getStatType() + " +" + value);
                 }
                 player.setActiveBuffsJson(buffSerializer.toJson(activeBuffs));
             }
@@ -202,7 +209,11 @@ public class SkillService {
 
         playerRepository.save(player);
 
-        return aegisName + " agora está no nível " + playerSkill.getCurrentLevel();
+        String msg = aegisName + " agora está no nível " + playerSkill.getCurrentLevel();
+        if (!passiveDesc.isEmpty()) {
+            msg += " [Passiva: " + String.join(", ", passiveDesc) + "]";
+        }
+        return msg;
     }
 
     @Transactional
@@ -315,16 +326,19 @@ public class SkillService {
             buffsAtivos.removeIf(b -> aegisName.equalsIgnoreCase(b.getSkillAegisName()));
 
             Map<String, Integer> vars = Map.of("skill_lv", skillLevel);
+            List<String> effectDesc = new ArrayList<>();
             for (SkillBuffEffectEntity effect : buffEffects) {
                 int value = scriptInterpreter.evaluateFormula(effect.getValueFormula(), vars);
                 StatType statType = StatType.valueOf(effect.getStatType());
                 buffsAtivos.add(new ActiveBuff(aegisName, statType, value, durationTurns));
+                effectDesc.add(effect.getStatType() + " +" + value);
             }
 
             playerEntity.setActiveBuffsJson(buffSerializer.toJson(buffsAtivos));
             playerRepository.save(playerEntity);
 
-            return String.format("Você usou %s. Efeito dura %d turnos.", aegisName, durationTurns);
+            return String.format("Você usou %s (Lv%d). Efeito dura %d turnos. [%s]",
+                    aegisName, skillLevel, durationTurns, String.join(", ", effectDesc));
         }
 
         // --- Fallback legado (usa campo script) ---
@@ -391,5 +405,25 @@ public class SkillService {
 
     private int orZero(Integer val) {
         return val != null ? val : 0;
+    }
+
+    /**
+     * Retorna a cadeia completa de classes do player em maiúsculas.
+     * Ex: LORD_KNIGHT → ["LORD_KNIGHT", "KNIGHT", "SWORDSMAN"]
+     * Permite que o player veja e aprenda skills de todas as classes anteriores.
+     */
+    private List<String> resolveClassChain(String jobClassName) {
+        if (jobClassName == null || jobClassName.isBlank()) return Collections.emptyList();
+        List<String> chain = new ArrayList<>();
+        try {
+            JobClass jc = JobClass.valueOf(jobClassName.toUpperCase());
+            while (jc != null) {
+                chain.add(jc.name());
+                jc = jc.parentClass;
+            }
+        } catch (IllegalArgumentException e) {
+            chain.add(jobClassName.toUpperCase());
+        }
+        return chain;
     }
 }
