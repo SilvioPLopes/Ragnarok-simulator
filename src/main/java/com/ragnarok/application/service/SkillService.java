@@ -1,5 +1,6 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.application.dto.SkillRowDTO;
 import com.ragnarok.domain.exception.*;
 import com.ragnarok.domain.model.*;
 import com.ragnarok.domain.model.JobClass;
@@ -43,7 +44,7 @@ public class SkillService {
     }
 
     public List<SkillRowDTO> listarSkillsDoPlayer(Long playerId) {
-        PlayerEntity player = playerRepository.findById(playerId).orElseThrow();
+        PlayerEntity player = playerRepository.findById(playerId).orElseThrow(() -> new GameException("Player not found: " + playerId));
         int skillPoints = player.getSkillPoints() != null ? player.getSkillPoints() : 0;
         String jobClass = player.getJobClass();
 
@@ -123,7 +124,7 @@ public class SkillService {
 
     @Transactional
     public String aprenderSkill(Long playerId, String aegisName) {
-        PlayerEntity player = playerRepository.findById(playerId).orElseThrow();
+        PlayerEntity player = playerRepository.findById(playerId).orElseThrow(() -> new GameException("Player not found: " + playerId));
         int skillPoints = player.getSkillPoints() != null ? player.getSkillPoints() : 0;
 
         if (skillPoints <= 0) {

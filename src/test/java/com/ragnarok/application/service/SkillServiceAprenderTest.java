@@ -1,5 +1,6 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.application.dto.SkillRowDTO;
 import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import com.ragnarok.infrastructure.persistence.PlayerSkillRepository;

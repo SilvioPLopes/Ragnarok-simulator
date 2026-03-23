@@ -67,7 +67,7 @@ public class SkillCombatService {
                 .filter(ps -> ps.getCurrentLevel() > 0)
                 .orElseThrow(() -> new GameException("Você não aprendeu " + aegisName + " ainda."));
 
-        PlayerEntity playerEntity = playerRepository.findById(playerId).orElseThrow();
+        PlayerEntity playerEntity = playerRepository.findById(playerId).orElseThrow(() -> new GameException("Player not found: " + playerId));
         int spAtual = playerEntity.getSpCurrent() != null ? playerEntity.getSpCurrent() : 0;
         int spCusto = skill.getSpCost() != null ? skill.getSpCost() : 10;
         int skillLevel = playerSkill.getCurrentLevel();

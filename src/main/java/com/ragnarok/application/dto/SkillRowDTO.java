@@ -1,4 +1,4 @@
-package com.ragnarok.application.service;
+package com.ragnarok.application.dto;
 
 public record SkillRowDTO(
         String aegisName,

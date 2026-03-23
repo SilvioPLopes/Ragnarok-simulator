@@ -41,7 +41,7 @@ public class PlayerSeedLoader {
                 log.info("Player inicial 'Hero' criado.");
             } else {
                 // Garante campos não-nulos em saves antigos
-                PlayerEntity p = playerRepo.findById(1L).orElseThrow();
+                PlayerEntity p = playerRepo.findById(1L).orElseThrow(() -> new RuntimeException("Player seed not found: id=1"));
                 boolean dirty = false;
                 if (p.getBaseExp()    == null) { p.setBaseExp(0L);    dirty = true; }
                 if (p.getJobExp()     == null) { p.setJobExp(0L);     dirty = true; }

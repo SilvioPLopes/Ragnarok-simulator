@@ -4,6 +4,8 @@ import com.ragnarok.infrastructure.persistence.ItemEntity;
 import com.ragnarok.infrastructure.persistence.ItemRepository;
 import com.ragnarok.infrastructure.persistence.MonsterEntity;
 import com.ragnarok.infrastructure.persistence.MonsterRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
@@ -17,6 +19,8 @@ import java.util.List;
 @Order(1)
 @Profile("!test")
 public class RathenaImporter implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(RathenaImporter.class);
 
     private static final String MOB_DB_URL =
             "https://raw.githubusercontent.com/rathena/rathena/master/db/re/mob_db.yml";
@@ -47,35 +51,35 @@ public class RathenaImporter implements CommandLineRunner {
     @Override
     public void run(String... args) {
         if (monsterRepo.count() == 0) {
-            System.out.println("🔄 Importando monstros do rAthena...");
+            log.info("Importing monsters from rAthena...");
             String yaml = downloadYaml(MOB_DB_URL);
             List<MonsterEntity> monsters = mobParser.parse(yaml);
             monsterRepo.saveAll(monsters);
-            System.out.println("✅ " + monsters.size() + " monstros importados.");
+            log.info("Imported {} monsters.", monsters.size());
         } else {
-            System.out.println("📦 Monstros já existem no banco. Pulando importação.");
+            log.info("Monsters already exist in the database. Skipping import.");
         }
 
         if (itemRepo.count() == 0) {
-            System.out.println("🔄 Importando itens do rAthena...");
+            log.info("Importing items from rAthena...");
 
             List<ItemEntity> todos = new ArrayList<>();
-            todos.addAll(parsearArquivo("Consumíveis", ITEM_DB_USABLE));
-            todos.addAll(parsearArquivo("Equipamentos", ITEM_DB_EQUIP));
-            todos.addAll(parsearArquivo("Etc",          ITEM_DB_ETC));
+            todos.addAll(parsearArquivo("Usable", ITEM_DB_USABLE));
+            todos.addAll(parsearArquivo("Equip",  ITEM_DB_EQUIP));
+            todos.addAll(parsearArquivo("Etc",    ITEM_DB_ETC));
 
             itemRepo.saveAll(todos);
-            System.out.println("✅ Total: " + todos.size() + " itens importados.");
+            log.info("Imported {} items total.", todos.size());
         } else {
-            System.out.println("📦 Itens já existem no banco. Pulando importação.");
+            log.info("Items already exist in the database. Skipping import.");
         }
     }
 
     private List<ItemEntity> parsearArquivo(String nome, String url) {
-        System.out.println("  ↳ Baixando " + nome + "...");
+        log.info("  Downloading {} items...", nome);
         String yaml = downloadYaml(url);
         List<ItemEntity> itens = itemParser.parse(yaml);
-        System.out.println("  ↳ " + itens.size() + " itens de " + nome + " parseados.");
+        log.info("  Parsed {} items from {}.", itens.size(), nome);
         return itens;
     }
 

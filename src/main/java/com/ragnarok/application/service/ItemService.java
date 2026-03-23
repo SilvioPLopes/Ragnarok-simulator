@@ -38,8 +38,8 @@ public class ItemService {
     }
 
     public void darItemAoJogador(Long playerId, long itemId, int qty) {
-        PlayerEntity player = playerRepository.findById(playerId).orElseThrow();
-        ItemEntity item = itemRepository.findById(itemId).orElseThrow();
+        PlayerEntity player = playerRepository.findById(playerId).orElseThrow(() -> new GameException("Player not found: " + playerId));
+        ItemEntity item = itemRepository.findById(itemId).orElseThrow(() -> new GameException("Item not found: " + itemId));
         PlayerItemEntity playerItem = new PlayerItemEntity();
         playerItem.setPlayer(player);
         playerItem.setItem(item);
