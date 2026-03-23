@@ -1,5 +1,6 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.Item;
 import com.ragnarok.domain.model.ItemType;
@@ -32,17 +33,15 @@ class ItemServiceIntegrationTest {
     @Autowired private PlayerItemRepository playerItemRepository;
 
     @Test
-    @DisplayName("Deve criar um item de teste (Definição) corretamente")
+    @DisplayName("Deve persistir item diretamente no repositório e recuperá-lo corretamente")
     @Transactional
-    void deveCriarItemDeTeste() {
-        // Executa
-        Item itemDomain = itemService.criarItemDeTeste(9999L, "Espada Lendária", 500);
+    void devePersistirERecuperarItem() {
+        createMockItem(9999L, "Espada Lendária", EquipSlot.HAND_R);
 
-        // Valida no Banco
         ItemEntity salvo = itemRepository.findById(9999L).orElseThrow();
         assertEquals("Espada Lendária", salvo.getName());
-        assertEquals(500, salvo.getAttack());
-        System.out.println("✅ Item criado e validado.");
+        assertEquals(ItemType.WEAPON, salvo.getType());
+        assertEquals(EquipSlot.HAND_R, salvo.getEquipSlot());
     }
 
     @Test
@@ -112,7 +111,7 @@ class ItemServiceIntegrationTest {
 
         // Ladrão tenta equipar o item da Vítima
         Long idLadrao = ladrao.getId(); // Variavel local para usar no lambda
-        assertThrows(IllegalStateException.class, () -> {
+        assertThrows(GameException.class, () -> {
             itemService.equiparItem(idLadrao, idItemDaVitima);
         });
         System.out.println("✅ Segurança validada: Ladrão não conseguiu equipar item alheio.");
@@ -136,7 +135,7 @@ class ItemServiceIntegrationTest {
 
         // Tenta equipar
         Long idPlayer = player.getId();
-        assertThrows(IllegalArgumentException.class, () -> {
+        assertThrows(GameException.class, () -> {
             itemService.equiparItem(idPlayer, idJellopy);
         });
         System.out.println("✅ Validação de Tipo: Não é possível equipar Jellopy.");
@@ -163,23 +162,33 @@ class ItemServiceIntegrationTest {
                 .orElseThrow()
                 .getId();
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(GameException.class,
                 () -> itemService.equiparItem(player.getId(), playerItemId));
     }
 
     @Test
-    @DisplayName("criarItemDeTeste persiste todos os campos flat corretamente")
+    @DisplayName("ItemEntity persiste todos os campos flat corretamente (flattening)")
     @Transactional
-    void criarItemDeTeste_verificaFlatteningCompleto() {
-        itemService.criarItemDeTeste(88803L, "TestSword", 100);
+    void itemEntity_verificaFlatteningCompleto() {
+        ItemEntity entity = new ItemEntity();
+        entity.setId(88803L);
+        entity.setName("TestSword");
+        entity.setAttack(100);
+        entity.setDefense(0);
+        entity.setSlots(2);
+        entity.setWeight(10);
+        entity.setPrice(100);
+        entity.setType(ItemType.WEAPON);
+        entity.setEquipSlot(EquipSlot.HAND_R);
+        itemRepository.save(entity);
 
-        ItemEntity entity = itemRepository.findById(88803L).orElseThrow();
-        assertEquals("TestSword", entity.getName());
-        assertEquals(100, entity.getAttack(), "attack deve ser 100");
-        assertEquals(0, entity.getDefense(), "defense deve ser 0");
-        assertEquals(2, entity.getSlots(), "slots deve ser 2");
-        assertEquals(ItemType.WEAPON, entity.getType(), "type deve ser WEAPON");
-        assertEquals(EquipSlot.HAND_R, entity.getEquipSlot(), "equipSlot deve ser HAND_R");
+        ItemEntity salvo = itemRepository.findById(88803L).orElseThrow();
+        assertEquals("TestSword", salvo.getName());
+        assertEquals(100, salvo.getAttack(), "attack deve ser 100");
+        assertEquals(0, salvo.getDefense(), "defense deve ser 0");
+        assertEquals(2, salvo.getSlots(), "slots deve ser 2");
+        assertEquals(ItemType.WEAPON, salvo.getType(), "type deve ser WEAPON");
+        assertEquals(EquipSlot.HAND_R, salvo.getEquipSlot(), "equipSlot deve ser HAND_R");
     }
 
     @Test

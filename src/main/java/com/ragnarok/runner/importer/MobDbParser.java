@@ -1,6 +1,8 @@
 package com.ragnarok.runner.importer;
 
 import com.ragnarok.infrastructure.persistence.MonsterEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -13,6 +15,8 @@ import java.util.stream.Collectors;
 
 @Component
 public class MobDbParser {
+
+    private static final Logger log = LoggerFactory.getLogger(MobDbParser.class);
 
     public List<MonsterEntity> parse(String yamlContent) {
         LoaderOptions options = new LoaderOptions();
@@ -55,7 +59,7 @@ public class MobDbParser {
 
             return entity;
         } catch (Exception e) {
-            System.err.println("Erro ao parsear monstro: " + mob.get("Name") + " — " + e.getMessage());
+            log.warn("Erro ao parsear monstro '{}': {}", mob.get("Name"), e.getMessage());
             return null;
         }
     }

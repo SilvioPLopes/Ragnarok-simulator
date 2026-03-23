@@ -5,6 +5,8 @@ import com.ragnarok.infrastructure.client.RagnapiClient;
 import com.ragnarok.infrastructure.client.dto.MonsterDTO;
 import com.ragnarok.infrastructure.client.mapper.MonsterMapper;
 import com.ragnarok.infrastructure.persistence.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +14,8 @@ import java.util.Optional;
 
 @Service
 public class MonsterCatalogService {
+
+    private static final Logger log = LoggerFactory.getLogger(MonsterCatalogService.class);
 
     private final RagnapiClient ragnapiClient;
     private final MonsterRepository monsterRepository;
@@ -111,7 +115,7 @@ public class MonsterCatalogService {
             String idStr = filename.split("\\.")[0];
             return Long.parseLong(idStr);
         } catch (Exception e) {
-            System.err.println("Erro ao extrair ID do item da URL: " + urlImagem);
+            log.warn("Não foi possível extrair ID do item da URL: {}", urlImagem);
             return null; // Ignora drops com URL quebrada
         }
     }

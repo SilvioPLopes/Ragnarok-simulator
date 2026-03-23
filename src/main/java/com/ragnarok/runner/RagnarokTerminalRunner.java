@@ -4,8 +4,10 @@ import com.ragnarok.application.service.BattleService;
 import com.ragnarok.application.service.ClassChangeService;
 import com.ragnarok.application.service.ItemService;
 import com.ragnarok.application.service.PlayerService;
+import com.ragnarok.application.service.SkillCombatService;
 import com.ragnarok.application.service.SkillRowDTO;
 import com.ragnarok.application.service.SkillService;
+import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.domain.model.Player;
@@ -31,6 +33,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     private final PlayerMapper playerMapper;
     private final MapPortalRepository portalRepo;
     private final SkillService skillService;
+    private final SkillCombatService skillCombatService;
     private final ClassChangeService classChangeService;
 
     private final Scanner scanner = new Scanner(System.in);
@@ -45,7 +48,8 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
                                   PlayerRepository pr, PlayerItemRepository pir,
                                   MapMonsterRepository mmr, MonsterRepository mr,
                                   PlayerMapper pm, MapPortalRepository portalRepo,
-                                  SkillService skillService, ClassChangeService classChangeService) {
+                                  SkillService skillService, SkillCombatService skillCombatService,
+                                  ClassChangeService classChangeService) {
         this.battleService      = bs;
         this.playerService      = ps;
         this.itemService        = is;
@@ -56,6 +60,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         this.playerMapper       = pm;
         this.portalRepo         = portalRepo;
         this.skillService       = skillService;
+        this.skillCombatService = skillCombatService;
         this.classChangeService = classChangeService;
     }
 
@@ -323,7 +328,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         try {
             classChangeService.trocarClasse(currentPlayer.getId(), novaClasse);
             System.out.println(">>> Voce agora e um(a) " + novaClasse.name() + "! Job Level resetado para 1.");
-        } catch (IllegalStateException e) {
+        } catch (GameException e) {
             System.out.println(">>> " + e.getMessage());
         }
     }
@@ -432,7 +437,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
             try {
                 String resultado = skillService.aprenderSkill(currentPlayer.getId(), selecionada.aegisName());
                 System.out.println(">>> " + resultado);
-            } catch (IllegalStateException e) {
+            } catch (GameException e) {
                 System.out.println(">>> " + e.getMessage());
             }
         }
@@ -469,9 +474,9 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
         String aegisName = skills.get(escolha - 1).aegisName();
         try {
-            String resultado = skillService.usarSkillEmCombate(currentPlayer.getId(), aegisName, null);
+            String resultado = skillCombatService.usarSkillEmCombate(currentPlayer.getId(), aegisName, null);
             System.out.println(">>> " + resultado);
-        } catch (IllegalStateException e) {
+        } catch (GameException e) {
             System.out.println(">>> " + e.getMessage());
         }
         System.out.println("(Pressione ENTER para continuar)");
@@ -554,9 +559,9 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
         String aegisName = skills.get(escolha - 1).aegisName();
         try {
-            String resultado = skillService.usarSkillEmCombate(currentPlayer.getId(), aegisName, currentMonster.getId());
+            String resultado = skillCombatService.usarSkillEmCombate(currentPlayer.getId(), aegisName, currentMonster.getId());
             System.out.println(">>> " + resultado);
-        } catch (IllegalStateException e) {
+        } catch (GameException e) {
             System.out.println(">>> " + e.getMessage());
         }
         System.out.println("(Pressione ENTER para continuar)");

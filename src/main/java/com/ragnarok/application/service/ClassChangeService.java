@@ -1,9 +1,13 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.exception.InsufficientJobLevelException;
+import com.ragnarok.domain.exception.InvalidClassProgressionException;
 import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import com.ragnarok.infrastructure.persistence.SkillTreeRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +16,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ClassChangeService {
+
+    private static final Logger log = LoggerFactory.getLogger(ClassChangeService.class);
 
     private final PlayerRepository playerRepository;
     private final SkillTreeRepository skillTreeRepository;
@@ -65,7 +71,7 @@ public class ClassChangeService {
 
         // Guard: apenas NOVICE e tier-1 podem trocar de classe
         if (current.tier >= 2 || (current.tier == 0 && current != JobClass.NOVICE)) {
-            throw new IllegalStateException("Troca de classe não disponível para esta classe.");
+            throw new InvalidClassProgressionException("Troca de classe não disponível para esta classe.");
         }
 
         // Valida que a nova classe está disponível no banco
@@ -83,29 +89,31 @@ public class ClassChangeService {
         }
 
         if (!validTargets.contains(novaClasse)) {
-            throw new IllegalStateException("Classe inválida para progressão.");
+            throw new InvalidClassProgressionException("Classe inválida para progressão.");
         }
 
         // Verifica job level
         int jobLevel = player.getJobLevel() != null ? player.getJobLevel() : 0;
         if (current == JobClass.NOVICE) {
             if (jobLevel < 9) {
-                throw new IllegalStateException("Job level insuficiente. Necessário: 9");
+                throw new InsufficientJobLevelException(9);
             }
         } else if (current.tier == 1) {
             if (jobLevel < 40) {
-                throw new IllegalStateException("Job level insuficiente. Necessário: 40");
+                throw new InsufficientJobLevelException(40);
             }
         } else {
-            throw new IllegalStateException("Progressão de classe não suportada para este tier.");
+            throw new InvalidClassProgressionException("Progressão de classe não suportada para este tier.");
         }
 
         // Aplica transição
+        String classeAnterior = player.getJobClass();
         player.setJobClass(novaClasse.name());
         player.setJobLevel(1);
         player.setJobExp(0L);
         // skillPoints são mantidos intencionalmente
         playerRepository.save(player);
+        log.info("Player {} evoluiu de {} para {}.", playerId, classeAnterior, novaClasse.name());
     }
 
     private JobClass resolveJobClass(String jobClassStr) {

@@ -5,6 +5,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 
+/**
+ * @deprecated Substituído por {@link MapMonsterRepository} que usa dados reais do rAthena.
+ */
+@Deprecated
 @Repository
 public interface MonsterSpawnRepository extends JpaRepository<MonsterSpawnEntity, Long> {
     // CORREÇÃO: JOIN FETCH carrega o monstro na mesma query, prevenindo LazyInitializationException

@@ -14,6 +14,9 @@ import com.ragnarok.infrastructure.persistence.MonsterEntity;
 import com.ragnarok.infrastructure.persistence.MonsterRepository;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
+import com.ragnarok.domain.exception.PlayerDeadException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,8 @@ import java.util.List;
 
 @Service
 public class BattleService {
+
+    private static final Logger log = LoggerFactory.getLogger(BattleService.class);
 
     private final PlayerRepository playerRepository;
     private final MonsterRepository monsterRepository;
@@ -61,7 +66,8 @@ public class BattleService {
                 .orElseThrow(() -> new IllegalArgumentException("Monster not found"));
 
         if (playerEntity.getHpCurrent() != null && playerEntity.getHpCurrent() <= 0) {
-            throw new IllegalStateException("O jogador está morto e não pode realizar ações de combate.");
+            log.warn("Tentativa de ataque bloqueada: player {} está morto.", playerId);
+            throw new PlayerDeadException();
         }
 
         Player player = playerMapper.toDomain(playerEntity);
@@ -102,6 +108,7 @@ public class BattleService {
         playerRepository.save(playerEntity);
 
         if (playerNewHp <= 0) {
+            log.info("Player {} morreu para {} (dano recebido: {}).", playerId, monster.getName(), monsterDamage);
             return String.format("FATAL: Você causou %d de dano, mas o %s contra-atacou com %d e você morreu.", damage, monster.getName(), monsterDamage);
         }
 
@@ -111,15 +118,18 @@ public class BattleService {
     }
 
     private String processarMorteMonstro(PlayerEntity playerEntity, Monster monsterDomain) {
-        StringBuilder log = new StringBuilder();
-        log.append("\n🌟 VITÓRIA! O ").append(monsterDomain.getName()).append(" foi derrotado.\n");
+        log.info("Player {} derrotou {}. Base EXP: {}, Job EXP: {}.",
+                playerEntity.getId(), monsterDomain.getName(),
+                monsterDomain.getBaseExp(), monsterDomain.getJobExp());
+        StringBuilder resultado = new StringBuilder();
+        resultado.append("\n🌟 VITÓRIA! O ").append(monsterDomain.getName()).append(" foi derrotado.\n");
 
         // 1. Processar Drops (Código existente)
         List<Item> loots = battleEngine.calculateLoot(monsterDomain);
         if (loots.isEmpty()) {
-            log.append("Loot: Nenhum item caiu.\n");
+            resultado.append("Loot: Nenhum item caiu.\n");
         } else {
-            log.append("Loot: ");
+            resultado.append("Loot: ");
             for (Item itemDomain : loots) {
                 ItemEntity itemEntity = itemMapper.toEntity(itemDomain);
                 java.util.List<PlayerItemEntity> existing =
@@ -142,9 +152,9 @@ public class BattleService {
                     newItem.setEquipped(false);
                     playerItemRepository.save(newItem);
                 }
-                log.append("[").append(itemDomain.getName()).append("] ");
+                resultado.append("[").append(itemDomain.getName()).append("] ");
             }
-            log.append("\n");
+            resultado.append("\n");
         }
 
         // 2. PROCESSAR EXPERIÊNCIA (NOVO)
@@ -157,7 +167,7 @@ public class BattleService {
 
         // Chama o Domain Service para calcular Level Up
         String levelLog = levelingService.processarExperiencia(playerDomain, baseExpGain, jobExpGain);
-        log.append(levelLog);
+        resultado.append(levelLog);
 
         // 3. Atualiza Entity com os novos dados do Domain (Level, Exp, Pontos)
         playerEntity.setBaseLevel(playerDomain.getBaseLevel());
@@ -174,7 +184,7 @@ public class BattleService {
         // Persiste todos os dados de XP, level e pontos acumulados
         playerRepository.save(playerEntity);
 
-        return log.toString();
+        return resultado.toString();
     }
 
     private String identificarArma(Player p) {

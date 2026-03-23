@@ -36,6 +36,7 @@ class RagnarokTerminalRunnerTest {
     @Mock private PlayerMapper playerMapper;
     @Mock private MapPortalRepository portalRepo;
     @Mock private SkillService skillService;
+    @Mock private SkillCombatService skillCombatService;
     @Mock private ClassChangeService classChangeService;
 
     @InjectMocks

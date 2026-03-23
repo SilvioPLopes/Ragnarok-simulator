@@ -1,5 +1,6 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.domain.model.EffectResult;
 import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.Item;
@@ -36,21 +37,6 @@ public class ItemService {
         this.scriptInterpreter = scriptInterpreter;
     }
 
-    public com.ragnarok.domain.model.Item criarItemDeTeste(Long id, String name, int attack) {
-        ItemEntity entity = new ItemEntity();
-        entity.setId(id);
-        entity.setName(name);
-        entity.setAttack(attack);
-        entity.setDefense(0);
-        entity.setSlots(2);
-        entity.setWeight(10);
-        entity.setPrice(100);
-        entity.setType(com.ragnarok.domain.model.ItemType.WEAPON);
-        entity.setEquipSlot(com.ragnarok.domain.model.EquipSlot.HAND_R);
-        itemRepository.save(entity);
-        return itemMapper.toDomain(entity);
-    }
-
     public void darItemAoJogador(Long playerId, long itemId, int qty) {
         PlayerEntity player = playerRepository.findById(playerId).orElseThrow();
         ItemEntity item = itemRepository.findById(itemId).orElseThrow();
@@ -66,11 +52,11 @@ public class ItemService {
         PlayerItemEntity playerItem = playerItemRepository.findById(playerItemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item não encontrado no inventário."));
         if (!playerItem.getPlayer().getId().equals(playerId)) {
-            throw new IllegalStateException("Tentativa de equipar item de outro jogador!");
+            throw new GameException("Tentativa de equipar item de outro jogador!");
         }
         ItemType tipo = playerItem.getItem().getType();
         if (tipo != ItemType.WEAPON && tipo != ItemType.ARMOR) {
-            throw new IllegalArgumentException("Este item não é um equipamento.");
+            throw new GameException("Este item não é um equipamento.");
         }
         return gerenciarEquipamento(playerItem);
     }
@@ -98,7 +84,7 @@ public class ItemService {
         }
 
         if (!itemAlvo.getPlayer().getId().equals(itemAlvo.getPlayer().getId())) {
-            throw new IllegalStateException("Tentativa de equipar item de outro jogador!");
+            throw new GameException("Tentativa de equipar item de outro jogador!");
         }
 
         EquipSlot slotAlvo = itemAlvo.getItem().getEquipSlot();

@@ -3,6 +3,11 @@ package com.ragnarok.infrastructure.persistence;
 import jakarta.persistence.*;
 import lombok.*;
 
+/**
+ * @deprecated Substituído por {@link MapMonsterEntity} que usa dados reais do rAthena.
+ * Mantido apenas para compatibilidade com o teste {@code MapSpawnIntegrationTest}.
+ */
+@Deprecated
 @Entity
 @Table(name = "monster_spawns")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor

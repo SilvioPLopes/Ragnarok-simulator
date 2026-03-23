@@ -1,5 +1,6 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.exception.PlayerDeadException;
 import com.ragnarok.domain.model.*;
 import com.ragnarok.domain.service.BattleEngine;
 import com.ragnarok.domain.service.LevelingService;
@@ -331,16 +332,16 @@ class BattleServiceTest {
                 "Mensagem deveria indicar monstro não encontrado: " + ex.getMessage());
     }
 
-    // ── Cenário bônus: Player já morto → lança IllegalStateException ──────────
+    // ── Cenário bônus: Player já morto → lança PlayerDeadException ──────────
 
     @Test
-    @DisplayName("Player com HP zero tenta atacar — lança IllegalStateException")
-    void realizarAtaque_playerJaMorto_lancaIllegalStateException() {
+    @DisplayName("Player com HP zero tenta atacar — lança PlayerDeadException")
+    void realizarAtaque_playerJaMorto_lancaPlayerDeadException() {
         PlayerEntity playerEntity = makePlayerEntity(0);  // HP já zerado
         when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(playerEntity));
         when(monsterRepository.findById(MONSTER_ID)).thenReturn(Optional.of(makeMonsterEntity(100)));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(PlayerDeadException.class,
                 () -> battleService.realizarAtaque(PLAYER_ID, MONSTER_ID));
 
         // BattleEngine não deve ser chamado

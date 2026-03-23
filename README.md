@@ -1,5 +1,8 @@
 # Ragnarok Core — Hexagonal Architecture
 
+![CI](https://github.com/SilvioPLopes/ragnarok-core/actions/workflows/ci.yml/badge.svg)
+![Coverage](https://img.shields.io/badge/coverage-85%25%2B-brightgreen)
+
 Este projeto é o núcleo (Core) de um sistema de emulação e gerenciamento de dados baseado no jogo **Ragnarok Online**. O projeto foi construído e refatorado para **Arquitetura Hexagonal (Ports and Adapters)**, desacoplando completamente as regras de negócio (Domínio) de frameworks externos, banco de dados e APIs. Toda a base de dados do jogo (monstros, itens, mapas, warps, drops, skills) é importada diretamente do servidor oficial **rAthena** (`db/re/` — versão Renewal).
 
 ---
@@ -21,7 +24,7 @@ Este projeto é o núcleo (Core) de um sistema de emulação e gerenciamento de 
 | Modificadores de Tamanho | Operacional | Weapon vs. Small/Medium/Large com tabela real do jogo |
 | Troca de Classe | Operacional | Progressão NOVICE → Tier1 → Tier2 → Tier3 com validação de job level |
 | Startup Automático | Operacional | `StartupDataLoader` popula todas as tabelas estáticas no boot |
-| Cobertura de Testes | **195 testes** | Unit + Integração — zero falhas |
+| Cobertura de Testes | **212 testes** | Unit + Integração — zero falhas (JaCoCo ≥ 85% instrução / ≥ 62% branch) |
 
 ---
 
@@ -66,7 +69,7 @@ O projeto segue estritamente a separação de responsabilidades da arquitetura h
 | Classe | Ordem | Função |
 |---|---|---|
 | `RathenaImporter` | `@Order(1)` | Importa monstros e itens do rAthena GitHub automaticamente no startup |
-| `MockMapLoader` | `@Order(2)` | Cria o player inicial |
+| `PlayerSeedLoader` | `@Order(2)` | Cria o player inicial |
 | `StartupDataLoader` | `@Order(3)` | Popula `maps`, `map_portals`, `map_monsters`, `monster_drops`, `skills`, `skill_tree`, `skill_buff_effects` e `weapon_size_modifiers` a partir dos SQLs em `src/main/resources/db/` |
 | `RagnarokTerminalRunner` | — | UI do terminal, game loop de exploração e combate |
 

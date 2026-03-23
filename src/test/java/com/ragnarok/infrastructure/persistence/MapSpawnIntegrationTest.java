@@ -33,7 +33,7 @@ class MapSpawnIntegrationTest {
     @DisplayName("Spawn: Deve localizar monstros vinculados a um mapa específico")
     @Transactional
     void deveEncontrarSpawnsPorMapa() {
-        // 1. SETUP: Mapa Isolado (Evita conflito com MockMapLoader que usa prt_fild08)
+        // 1. SETUP: Mapa Isolado (Evita conflito com PlayerSeedLoader que usa prt_fild08)
         GameMapEntity map = new GameMapEntity();
         map.setId("test_map_001"); // ID Único para o teste
         map.setName("Test Field");

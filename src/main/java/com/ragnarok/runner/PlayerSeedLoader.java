@@ -2,13 +2,17 @@ package com.ragnarok.runner;
 
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 
 @Configuration
-public class MockMapLoader {
+public class PlayerSeedLoader {
+
+    private static final Logger log = LoggerFactory.getLogger(PlayerSeedLoader.class);
 
     @Bean
     @Order(2)
@@ -34,7 +38,7 @@ public class MockMapLoader {
                 p.setSkillPoints(0);
                 p.setMapName("prontera");
                 playerRepo.save(p);
-                System.out.println(">>> Player 'Hero' criado.");
+                log.info("Player inicial 'Hero' criado.");
             } else {
                 // Garante campos não-nulos em saves antigos
                 PlayerEntity p = playerRepo.findById(1L).orElseThrow();

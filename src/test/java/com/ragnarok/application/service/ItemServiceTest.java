@@ -1,6 +1,8 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.Item;
+import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.infrastructure.persistence.ItemEntity;
 import com.ragnarok.infrastructure.persistence.ItemRepository;
 import com.ragnarok.runner.RagnarokTerminalRunner;
@@ -10,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -30,23 +33,27 @@ class ItemServiceTest {
     private ItemRepository itemRepository;
 
     @Test
-    @DisplayName("Deve salvar uma Katana e verificar se o Ataque (Stats) foi achatado na tabela")
-    void deveSalvarItem() {
-        // 1. Ação
-        Long idKatana = 4001L;
-        itemService.criarItemDeTeste(idKatana, "Katana", 60);
+    @Transactional
+    @DisplayName("Deve persistir item com campos flat (flattening — attack/slots em colunas diretas)")
+    void deveSalvarItemComFlattening() {
+        ItemEntity entity = new ItemEntity();
+        entity.setId(4001L);
+        entity.setName("Katana");
+        entity.setAttack(60);
+        entity.setDefense(0);
+        entity.setSlots(2);
+        entity.setWeight(10);
+        entity.setPrice(100);
+        entity.setType(ItemType.WEAPON);
+        entity.setEquipSlot(EquipSlot.HAND_R);
+        itemRepository.save(entity);
 
-        // 2. Validação no Banco
-        Optional<ItemEntity> banco = itemRepository.findById(idKatana);
+        Optional<ItemEntity> banco = itemRepository.findById(4001L);
 
         assertTrue(banco.isPresent(), "A Katana deveria estar no banco");
         assertEquals("Katana", banco.get().getName());
-
-        // Teste do Flattening: O ataque estava dentro de 'stats' no domínio,
-        // mas deve estar na coluna direta 'attack' no banco.
+        // Flattening: campos aninhados do domínio persistidos em colunas diretas
         assertEquals(60, banco.get().getAttack(), "O Ataque deve estar na coluna plana");
         assertEquals(2, banco.get().getSlots(), "Os Slots devem estar na coluna plana");
-
-        System.out.println("SUCESSO! Item salvo: " + banco.get().getName());
     }
 }

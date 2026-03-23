@@ -1,5 +1,6 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import com.ragnarok.infrastructure.persistence.PlayerSkillRepository;
 import com.ragnarok.runner.RagnarokTerminalRunner;
@@ -91,7 +92,7 @@ class SkillServiceAprenderTest {
         var lista = skillService.listarSkillsDoPlayer(PLAYER_ID);
         var qualquerSkill = lista.get(0);
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(GameException.class,
                 () -> skillService.aprenderSkill(PLAYER_ID, qualquerSkill.aegisName()),
                 "Deve lançar exceção quando não há skill points");
     }
@@ -116,7 +117,7 @@ class SkillServiceAprenderTest {
         }
 
         // Tenta aprender além do máximo
-        assertThrows(IllegalStateException.class,
+        assertThrows(GameException.class,
                 () -> skillService.aprenderSkill(PLAYER_ID, skill.aegisName()),
                 "Deve lançar exceção quando skill está no nível máximo");
     }
@@ -133,7 +134,7 @@ class SkillServiceAprenderTest {
         if (lista.isEmpty()) return; // sem dados de skill_tree, teste não se aplica
 
         String qualquerSkill = lista.get(0).aegisName();
-        assertThrows(IllegalStateException.class,
+        assertThrows(GameException.class,
                 () -> skillService.aprenderSkill(PLAYER_ID, qualquerSkill));
     }
 
@@ -141,7 +142,7 @@ class SkillServiceAprenderTest {
     @DisplayName("aprenderSkill lança IllegalStateException para skill inexistente na classe")
     void aprenderSkill_skillInexistente_lancaExcecao() {
         // BOWLING_BASH é skill de Knight — não existe na árvore do Novice (player ID=1)
-        assertThrows(IllegalStateException.class,
+        assertThrows(GameException.class,
                 () -> skillService.aprenderSkill(PLAYER_ID, "BOWLING_BASH"));
     }
 

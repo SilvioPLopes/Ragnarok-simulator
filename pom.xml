@@ -107,7 +107,7 @@
                                 <!-- Terminal runner: menus interativos (System.in + loops infinitos) -->
                                 <exclude>com/ragnarok/runner/RagnarokTerminalRunner.class</exclude>
                                 <!-- Startup beans: lógica de inicialização, coberta pelos testes de integração -->
-                                <exclude>com/ragnarok/runner/MockMapLoader.class</exclude>
+                                <exclude>com/ragnarok/runner/PlayerSeedLoader.class</exclude>
                                 <exclude>com/ragnarok/runner/StartupDataLoader.class</exclude>
                                 <!-- Enums sem lógica -->
                                 <exclude>com/ragnarok/domain/model/SkillElement.class</exclude>
@@ -131,7 +131,7 @@
                                 <exclude>com/ragnarok/infrastructure/client/dto/**</exclude>
                                 <exclude>com/ragnarok/runner/importer/dto/**</exclude>
                                 <exclude>com/ragnarok/runner/RagnarokTerminalRunner.class</exclude>
-                                <exclude>com/ragnarok/runner/MockMapLoader.class</exclude>
+                                <exclude>com/ragnarok/runner/PlayerSeedLoader.class</exclude>
                                 <exclude>com/ragnarok/runner/StartupDataLoader.class</exclude>
                                 <exclude>com/ragnarok/domain/model/SkillElement.class</exclude>
                                 <exclude>com/ragnarok/domain/model/SkillEffectType.class</exclude>
