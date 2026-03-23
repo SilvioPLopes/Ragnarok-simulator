@@ -99,7 +99,7 @@ public class BattleEngine {
 
         for (MonsterDrop drop : monster.getDrops()) {
             double roll = ThreadLocalRandom.current().nextDouble(0, 100);
-            if (roll <= drop.getRate()) {
+            if (roll < drop.getRate()) {
                 droppedItems.add(drop.getItem());
             }
         }
