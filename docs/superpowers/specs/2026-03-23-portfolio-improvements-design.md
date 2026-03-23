@@ -23,13 +23,13 @@ Work is organized in two dependency waves. All features in Wave 1 touch disjoint
 | A — REST API + Swagger | Expose the full game loop as HTTP endpoints | `api/` (new), `pom.xml` |
 | B — Testcontainers | Replace hardcoded PostgreSQL config in integration tests | `pom.xml`, `*IntegrationTest.java`, `application-test.properties` |
 | C — Spring Cache | Cache static game data with Caffeine | `pom.xml`, `WeaponSizeService`, `SkillService`, `SkillCombatService`, `CacheConfig` (new) |
-| F — Resilience4j | Add retry + circuit breaker to `RathenaImporter` | `pom.xml`, `RathenaImporter`, `application.properties` |
+| F — Resilience4j | Add retry + circuit breaker to rAthena download | `pom.xml`, `RathenaDownloadService` (new), `RathenaImporter`, `application.properties` |
 
 ### Wave 2 — 1 agent (after Wave 1 stable)
 
 | Feature | Description | Files touched |
 |---|---|---|
-| D — Spring Events | Decouple `BattleService` via domain events | `BattleService`, `domain/event/` (new), `LevelingService`, `PlayerService` |
+| D — Spring Events | Decouple `BattleService` via domain events | `BattleService`, `domain/event/` (new), `application/service/BattleEventHandler` (new), `PlayerService` |
 
 ---
 
@@ -41,9 +41,11 @@ Work is organized in two dependency waves. All features in Wave 1 touch disjoint
 <dependency>
     <groupId>org.springdoc</groupId>
     <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-    <version>2.x</version>
+    <version>2.8.6</version>
 </dependency>
 ```
+
+Compatible with Spring Boot 3.4.x. `spring-boot-starter-web` is already present in `pom.xml`.
 
 ### New package structure
 
@@ -63,21 +65,28 @@ com.ragnarok.api
 │   │   ├── SkillRowResponseDTO
 │   │   └── InventoryResponseDTO
 │   └── request
-│       └── (where needed)
-└── GlobalExceptionHandler   (@RestControllerAdvice)
+│       ├── AttackRequestDTO      { playerId, monsterId }
+│       ├── TravelRequestDTO      { destination }
+│       └── UseSkillRequestDTO    { monsterId (nullable) }
+└── GlobalExceptionHandler        (@RestControllerAdvice)
 ```
 
 ### Endpoints
 
-**PlayerController** `GET /api/players`, `GET /api/players/{id}`, `POST /api/players`
+POST endpoints use **request body DTOs**, not query parameters. Path variables carry resource identifiers.
+
+**PlayerController**
+- `GET /api/players` → list of `PlayerResponseDTO`
+- `GET /api/players/{id}` → `PlayerResponseDTO`
+- `POST /api/players` → create player
 
 **BattleController**
-- `POST /api/battle/attack?playerId=&monsterId=` → `BattleResponseDTO { playerDamage, monsterDamage, monsterHpAfter, monsterDead, loot, xpGained, levelUp, message }`
+- `POST /api/battle/attack` body `{ playerId, monsterId }` → `BattleResponseDTO { playerDamage, monsterDamage, monsterHpAfter, monsterDead, loot, xpGained, levelUp, message }`
 
 **SkillController**
 - `GET /api/players/{id}/skills` → list of `SkillRowResponseDTO`
 - `POST /api/players/{id}/skills/{skillName}/learn` → result message
-- `POST /api/players/{id}/skills/{skillName}/use?monsterId=` → `SkillUseResponseDTO { damage, buffApplied, healAmount, message }`
+- `POST /api/players/{id}/skills/{skillName}/use` body `{ monsterId }` (nullable) → `SkillUseResponseDTO { damage, buffApplied, healAmount, message }`
 
 **ItemController**
 - `GET /api/players/{id}/inventory` → list of inventory items
@@ -87,7 +96,7 @@ com.ragnarok.api
 - `GET /api/players/{id}/map` → current map and available portals
 - `GET /api/maps/{mapId}/portals` → portal destinations
 - `POST /api/players/{id}/map/walk` → random encounter result
-- `POST /api/players/{id}/map/travel?destination=` → travel result
+- `POST /api/players/{id}/map/travel` body `{ destination }` → travel result
 
 ### Error handling
 
@@ -97,6 +106,10 @@ com.ragnarok.api
 - Unexpected → 500
 
 All error responses: `{ "error": "message" }`
+
+### Testing
+
+Each controller gets a `@WebMvcTest` test class using `MockMvc`. Tests cover: happy path, invalid IDs (404), game rule violations (400). Controller tests mock the service layer — they do not extend `AbstractIntegrationTest`.
 
 ### Principles
 
@@ -128,6 +141,8 @@ All error responses: `{ "error": "message" }`
 </dependency>
 ```
 
+Both are managed by `spring-boot-dependencies` BOM — no explicit version needed.
+
 ### Design
 
 New abstract base class `AbstractIntegrationTest` shared by all integration test classes:
@@ -137,9 +152,12 @@ New abstract base class `AbstractIntegrationTest` shared by all integration test
 @SpringBootTest
 public abstract class AbstractIntegrationTest {
 
+    @MockBean
+    RagnarokTerminalRunner ragnarokTerminalRunner;  // suppresses interactive terminal during tests
+
     @Container
     static PostgreSQLContainer<?> postgres =
-        new PostgreSQLContainer<>("postgres:16").withReuse(true);
+        new PostgreSQLContainer<>("postgres:16");   // withReuse(true) intentionally omitted (see note)
 
     @DynamicPropertySource
     static void configure(DynamicPropertyRegistry registry) {
@@ -150,14 +168,17 @@ public abstract class AbstractIntegrationTest {
 }
 ```
 
-- `static` container is shared across all test suites in the same JVM run — one startup, not one per class
-- `withReuse(true)` avoids container teardown between test classes
-- All `*IntegrationTest` classes extend `AbstractIntegrationTest`
-- `application-test.properties` removes hardcoded datasource URL
+**Note on `withReuse(true)`:** Container reuse requires `testcontainers.reuse.enable=true` in `~/.testcontainers.properties` on each developer machine. Since this is a public portfolio project where contributors may not have this configured, `withReuse` is omitted. The `static` container is already shared for the full test suite in one JVM run, which is sufficient.
+
+**Note on `@MockBean RagnarokTerminalRunner`:** The existing integration tests already declare this mock individually. Moving it to `AbstractIntegrationTest` centralizes it — subclasses must not re-declare it.
+
+All `*IntegrationTest` classes extend `AbstractIntegrationTest` and remove their individual `@MockBean RagnarokTerminalRunner` declarations.
+
+`application-test.properties` removes the hardcoded datasource URL, username, and password (replaced by `@DynamicPropertySource`).
 
 ### Result
 
-`./mvnw test` works on any machine with Docker, without local PostgreSQL, without environment variables.
+`./mvnw test` works on any machine with Docker installed, without local PostgreSQL, without environment variables.
 
 ---
 
@@ -176,6 +197,8 @@ Each battle turn and skill listing triggers queries against `weapon_size_modifie
 </dependency>
 ```
 
+Managed by Spring Boot BOM — no version needed.
+
 ### Design
 
 New `CacheConfig.java` defines named caches with Caffeine:
@@ -190,10 +213,16 @@ New `CacheConfig.java` defines named caches with Caffeine:
 `@EnableCaching` added to `RagnarokCoreApplication`.
 
 **Annotations on existing services (no logic changes):**
-- `WeaponSizeService.getModifier()` → `@Cacheable("weaponSizeModifiers")`
-- `SkillService.listarSkillsDoPlayer()` → `@Cacheable(value="playerSkills", key="#playerId")`
-- `SkillService.aprenderSkill()` → `@CacheEvict(value="playerSkills", key="#playerId")`
+- `WeaponSizeService.getModifier(WeaponType, String)` → `@Cacheable("weaponSizeModifiers")` — default key uses both parameters; no explicit `key` needed since `WeaponType` is an enum with natural equality
+- `SkillService.listarSkillsDoPlayer(Long playerId)` → `@Cacheable(value="playerSkills", key="#playerId")`
+- `SkillService.aprenderSkill(Long playerId, String skillName)` → `@CacheEvict(value="playerSkills", key="#playerId")`
 - `SkillCombatService` buff effect lookup → `@Cacheable("skillBuffEffects")`
+
+**Deliberately uncached:** `listarSkillsUsaveisForaDeCombate()` — this method is already a filtered subset of `listarSkillsDoPlayer()` results and is called infrequently (only in the out-of-combat skill menu). Caching it separately would require a second eviction point on `aprenderSkill()` with a different cache key; the cost is not justified.
+
+### Testing
+
+`CacheVerificationTest` verifies that a second call to `WeaponSizeService.getModifier()` does not trigger an additional database query (using `@SpyBean` on the repository to count invocations).
 
 ---
 
@@ -202,6 +231,10 @@ New `CacheConfig.java` defines named caches with Caffeine:
 ### Problem
 
 `RathenaImporter` downloads data from GitHub on startup with no retry, timeout, or fallback. Network failure silently skips the import.
+
+### Root cause for design
+
+Resilience4j AOP proxies only intercept calls via the Spring proxy (calls from outside the bean). `RathenaImporter.run()` calls its own private download helper directly — those internal calls bypass the proxy and cannot be decorated. The download logic must be extracted to a separate Spring bean so that Resilience4j can intercept it.
 
 ### Dependency
 
@@ -227,19 +260,28 @@ resilience4j.circuitbreaker.instances.rathena.wait-duration-in-open-state=30s
 
 ### Design
 
-In `RathenaImporter`, the download method is annotated:
+New `@Service RathenaDownloadService` encapsulates the HTTP download:
 
 ```java
-@Retry(name = "rathena", fallbackMethod = "importacaoFalhou")
-@CircuitBreaker(name = "rathena")
-public void run(String... args) { ... }
+@Service
+public class RathenaDownloadService {
 
-private void importacaoFalhou(Exception e) {
-    log.warn("rAthena unavailable after retries. Starting with existing data. Cause: {}", e.getMessage());
+    @Retry(name = "rathena", fallbackMethod = "downloadFalhou")
+    @CircuitBreaker(name = "rathena")
+    public String downloadYaml(String url) {
+        // RestTemplate.getForObject(url, String.class)
+    }
+
+    private String downloadFalhou(String url, Exception e) {
+        log.warn("rAthena unavailable after retries ({}). Starting with existing data.", url);
+        return null;  // RathenaImporter checks for null and skips import gracefully
+    }
 }
 ```
 
-Only `RathenaImporter.java` is modified in production code.
+`RathenaImporter` injects `RathenaDownloadService` and delegates all HTTP calls to it. `RathenaImporter.run()` itself is not annotated.
+
+**Production files modified:** `RathenaImporter.java` (inject new service, replace HTTP calls), `RathenaDownloadService.java` (new).
 
 ---
 
@@ -251,7 +293,7 @@ Only `RathenaImporter.java` is modified in production code.
 
 ### Design
 
-**New domain events** (`com.ragnarok.domain.event`, immutable records):
+**New domain events** (`com.ragnarok.domain.event`, immutable records — no Spring dependencies):
 
 ```java
 record MonsterKilledEvent(Long playerId, Long monsterId, List<ItemDropInfo> drops, int xpBase, int xpJob) {}
@@ -263,14 +305,37 @@ record PlayerDiedEvent(Long playerId) {}
 
 ```java
 eventPublisher.publishEvent(new MonsterKilledEvent(...));
+eventPublisher.publishEvent(new PlayerDiedEvent(...));
 ```
 
-**Listeners via `@EventListener`** added to existing services:
-- `LevelingService.onMonsterKilled(MonsterKilledEvent)` — processes XP, checks level up, publishes `PlayerLeveledUpEvent`
-- Loot persistence listener — persists drops on `MonsterKilledEvent`
-- `PlayerService.onPlayerDied(PlayerDiedEvent)` — resurrects player
+**New `BattleEventHandler`** (`com.ragnarok.application.service`) — single class holds all `@EventListener` methods, preserving the hexagonal boundary:
+
+```java
+@Component
+public class BattleEventHandler {
+
+    @EventListener
+    public void onMonsterKilled(MonsterKilledEvent event) {
+        // delegate to LevelingService (XP + level up)
+        // persist loot drops
+        // publish PlayerLeveledUpEvent if level up occurred
+    }
+
+    @EventListener
+    public void onPlayerDied(PlayerDiedEvent event) {
+        // playerService.ressuscitarJogador(event.playerId())
+        // reset map to "prontera" via PlayerRepository
+    }
+}
+```
+
+`LevelingService` **stays pure domain** — no `@EventListener` or any Spring annotation is added to it. `BattleEventHandler` calls `levelingService.processarXp(...)` as a plain method call.
+
+**`PlayerService.onPlayerDied()` listener is NOT added to `PlayerService`** — `BattleEventHandler` handles death entirely, keeping `PlayerService` a simple orchestration service without event coupling.
 
 **Public API of `BattleService` does not change.** Terminal and REST API continue calling `battleService.realizarAtaque()` without modification.
+
+**`RagnarokTerminalRunner.handlePlayerDeath()`:** the resurrection and map-reset logic is removed from the terminal runner since `BattleEventHandler` now handles it on `PlayerDiedEvent`. The terminal runner only sets `inBattle = false`, clears `currentMonster`, and prints the death message.
 
 ### Why Wave 2
 
