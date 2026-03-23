@@ -6,6 +6,8 @@ import com.ragnarok.domain.model.*;
 import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.infrastructure.persistence.mapper.BuffSerializer;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +45,7 @@ public class SkillService {
         this.buffSerializer = buffSerializer;
     }
 
+    @Cacheable(value = "playerSkills", key = "#playerId")
     public List<SkillRowDTO> listarSkillsDoPlayer(Long playerId) {
         PlayerEntity player = playerRepository.findById(playerId).orElseThrow(() -> new GameException("Player not found: " + playerId));
         int skillPoints = player.getSkillPoints() != null ? player.getSkillPoints() : 0;
@@ -123,6 +126,7 @@ public class SkillService {
     }
 
     @Transactional
+    @CacheEvict(value = "playerSkills", key = "#playerId")
     public String aprenderSkill(Long playerId, String aegisName) {
         PlayerEntity player = playerRepository.findById(playerId).orElseThrow(() -> new GameException("Player not found: " + playerId));
         int skillPoints = player.getSkillPoints() != null ? player.getSkillPoints() : 0;

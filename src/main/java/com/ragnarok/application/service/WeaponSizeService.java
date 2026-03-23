@@ -3,6 +3,7 @@ package com.ragnarok.application.service;
 import com.ragnarok.domain.model.WeaponType;
 import com.ragnarok.infrastructure.persistence.WeaponSizeModifierEntity;
 import com.ragnarok.infrastructure.persistence.WeaponSizeModifierRepository;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -24,6 +25,7 @@ public class WeaponSizeService {
      * @param monsterSize  tamanho do monstro do rAthena ("Small", "Medium", "Large")
      * @return             modificador em % (100 = normal)
      */
+    @Cacheable("weaponSizeModifiers")
     public int getModifier(WeaponType weaponType, String monsterSize) {
         String key = weaponType != null ? weaponType.name() : WeaponType.NONE.name();
 
