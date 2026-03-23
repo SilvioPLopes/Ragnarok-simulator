@@ -1,14 +1,11 @@
 package com.ragnarok.infrastructure.persistence;
 
+import com.ragnarok.AbstractIntegrationTest;
 import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.ItemType;
-import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,16 +13,10 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@ActiveProfiles("test")
-@SpringBootTest
 @TestPropertySource(properties = {
         "spring.jpa.hibernate.ddl-auto=update"
 })
-class PlayerInventoryIntegrationTest {
-
-    @MockBean
-    @SuppressWarnings("unused")
-    private RagnarokTerminalRunner ragnarokTerminalRunner;
+class PlayerInventoryIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired private PlayerRepository playerRepository;
     @Autowired private ItemRepository itemRepository;

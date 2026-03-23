@@ -1,17 +1,14 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.AbstractIntegrationTest;
 import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.Item;
 import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.infrastructure.persistence.*;
-import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -19,13 +16,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@ActiveProfiles("test")
-@SpringBootTest
-class ItemServiceIntegrationTest {
-
-    @MockBean
-    @SuppressWarnings("unused")
-    private RagnarokTerminalRunner ragnarokTerminalRunner;
+class ItemServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired private ItemService itemService;
     @Autowired private PlayerRepository playerRepository;

@@ -1,29 +1,20 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.AbstractIntegrationTest;
 import com.ragnarok.application.dto.SkillRowDTO;
 import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.persistence.*;
-import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@ActiveProfiles("test")
-@SpringBootTest
-class SkillServiceIntegrationTest {
-
-    @MockBean
-    @SuppressWarnings("unused")
-    private RagnarokTerminalRunner ragnarokTerminalRunner;
+class SkillServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private SkillService skillService;
