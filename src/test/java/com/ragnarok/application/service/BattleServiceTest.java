@@ -1,19 +1,18 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.event.MonsterKilledEvent;
+import com.ragnarok.domain.event.PlayerDiedEvent;
+import com.ragnarok.domain.exception.PlayerDeadException;
 import com.ragnarok.domain.model.*;
 import com.ragnarok.domain.service.BattleEngine;
-import com.ragnarok.domain.service.LevelingService;
 import com.ragnarok.application.service.WeaponSizeService;
-import com.ragnarok.infrastructure.client.mapper.ItemMapper;
 import com.ragnarok.infrastructure.client.mapper.MonsterMapper;
-import com.ragnarok.infrastructure.persistence.ItemEntity;
 import com.ragnarok.infrastructure.persistence.MonsterEntity;
 import com.ragnarok.infrastructure.persistence.MonsterRepository;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
-import com.ragnarok.infrastructure.persistence.PlayerItemEntity;
-import com.ragnarok.infrastructure.persistence.PlayerItemRepository;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,13 +39,7 @@ class BattleServiceTest {
     private MonsterRepository monsterRepository;
 
     @Mock
-    private PlayerItemRepository playerItemRepository;
-
-    @Mock
     private PlayerMapper playerMapper;
-
-    @Mock
-    private ItemMapper itemMapper;
 
     @Mock
     private MonsterMapper monsterMapper;
@@ -55,10 +48,10 @@ class BattleServiceTest {
     private BattleEngine battleEngine;
 
     @Mock
-    private LevelingService levelingService;
+    private WeaponSizeService weaponSizeService;
 
     @Mock
-    private WeaponSizeService weaponSizeService;
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private BattleService battleService;
@@ -136,15 +129,8 @@ class BattleServiceTest {
         return m;
     }
 
-    /**
-     * Stub leniente para processarExperiencia: o método é chamado somente quando
-     * o monstro morre (cenário VITÓRIA). Nos demais cenários o stub ficaria sem uso
-     * e causaria UnnecessaryStubbingException sem o lenient().
-     */
     @BeforeEach
-    void setupLevelingStub() {
-        lenient().when(levelingService.processarExperiencia(any(Player.class), anyLong(), anyLong()))
-                .thenReturn(" (+5 Base XP) (+3 Job XP)");
+    void setupStubs() {
         // WeaponSizeService retorna int; Mockito default é 0, o que zeraria o dano.
         // Retorna 100 (= 100% modificador, sem penalidade de tamanho).
         lenient().when(weaponSizeService.getModifier(any(), any())).thenReturn(100);
@@ -214,6 +200,9 @@ class BattleServiceTest {
 
         // Monstro deve ser deletado (monsterRepository.delete ou deleteById)
         verify(monsterRepository, never()).save(argThat(m -> m.getId().equals(MONSTER_ID) && m.getHp() > 0));
+
+        // Evento de morte do monstro deve ser publicado
+        verify(eventPublisher).publishEvent(any(MonsterKilledEvent.class));
     }
 
     // ── Cenário 3: Monstro contra-ataca → HP do player decrementado ──────────
@@ -268,6 +257,9 @@ class BattleServiceTest {
 
         // HP do player deve ter chegado a 0
         assertEquals(0, playerEntity.getHpCurrent());
+
+        // Evento de morte do player deve ser publicado
+        verify(eventPublisher).publishEvent(any(PlayerDiedEvent.class));
     }
 
     // ── Cenário 5: Monstro sobrevive → não é deletado ─────────────────────────
@@ -331,27 +323,27 @@ class BattleServiceTest {
                 "Mensagem deveria indicar monstro não encontrado: " + ex.getMessage());
     }
 
-    // ── Cenário bônus: Player já morto → lança IllegalStateException ──────────
+    // ── Cenário bônus: Player já morto → lança PlayerDeadException ──────────
 
     @Test
-    @DisplayName("Player com HP zero tenta atacar — lança IllegalStateException")
-    void realizarAtaque_playerJaMorto_lancaIllegalStateException() {
+    @DisplayName("Player com HP zero tenta atacar — lança PlayerDeadException")
+    void realizarAtaque_playerJaMorto_lancaPlayerDeadException() {
         PlayerEntity playerEntity = makePlayerEntity(0);  // HP já zerado
         when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(playerEntity));
         when(monsterRepository.findById(MONSTER_ID)).thenReturn(Optional.of(makeMonsterEntity(100)));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(PlayerDeadException.class,
                 () -> battleService.realizarAtaque(PLAYER_ID, MONSTER_ID));
 
         // BattleEngine não deve ser chamado
         verify(battleEngine, never()).calculateDamage(any(), any());
     }
 
-    // ── Cenário: Monstro morre com loot — item novo adicionado ao inventário ────
+    // ── Cenário: Monstro morre com loot — MonsterKilledEvent contém o loot ────
 
     @Test
-    @DisplayName("Monstro morre com loot — item novo é salvo no inventário do player")
-    void realizarAtaque_monsterMorreComLoot_itemNovoSalvoNoInventario() {
+    @DisplayName("Monstro morre com loot — MonsterKilledEvent é publicado com o item no loot")
+    void realizarAtaque_monsterMorreComLoot_eventoPublicadoComLoot() {
         PlayerEntity playerEntity = makePlayerEntity(100);
         MonsterEntity monsterEntity = makeMonsterEntity(10);
         Player playerDomain = makeDomainPlayer(100);
@@ -361,67 +353,46 @@ class BattleServiceTest {
         lootItem.setId(500L);
         lootItem.setName("Red Herb");
 
-        ItemEntity lootEntity = new ItemEntity();
-        lootEntity.setId(500L);
-        lootEntity.setName("Red Herb");
-
         when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(playerEntity));
         when(monsterRepository.findById(MONSTER_ID)).thenReturn(Optional.of(monsterEntity));
         when(playerMapper.toDomain(playerEntity)).thenReturn(playerDomain);
         when(monsterMapper.toDomain(monsterEntity)).thenReturn(monsterDomain);
         when(battleEngine.calculateDamage(playerDomain, monsterDomain)).thenReturn(20);
         when(battleEngine.calculateLoot(monsterDomain)).thenReturn(List.of(lootItem));
-        when(itemMapper.toEntity(lootItem)).thenReturn(lootEntity);
-        when(playerItemRepository.findByPlayerIdAndItemId(PLAYER_ID, 500L))
-                .thenReturn(new ArrayList<>());
 
         String resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
 
-        verify(playerItemRepository).save(argThat(pi ->
-                pi.getItem().getId().equals(500L) && Integer.valueOf(1).equals(pi.getAmount())));
+        verify(eventPublisher).publishEvent(argThat((MonsterKilledEvent e) ->
+                e.playerId().equals(PLAYER_ID) &&
+                e.monsterId().equals(MONSTER_ID) &&
+                e.loot().size() == 1 &&
+                e.loot().get(0).getName().equals("Red Herb")));
         String resultadoUpper = resultado.toUpperCase();
         assertTrue(resultadoUpper.contains("VITORIA") || resultadoUpper.contains("VITÓRIA")
                         || resultadoUpper.contains("VICT"),
                 "Resultado deveria indicar vitória: " + resultado);
     }
 
-    // ── Cenário: Monstro morre com loot — item já no inventário (stack merge) ───
+    // ── Cenário: Monstro morre com loot — MonsterKilledEvent carrega exp ────────
 
     @Test
-    @DisplayName("Monstro morre com loot — item existente tem quantidade incrementada (stack merge)")
-    void realizarAtaque_monsterMorreComLoot_itemExistenteIncrementaStack() {
+    @DisplayName("Monstro morre — MonsterKilledEvent carrega baseExp e jobExp do monstro")
+    void realizarAtaque_monsterMorre_eventoContemExpDoMonstro() {
         PlayerEntity playerEntity = makePlayerEntity(100);
         MonsterEntity monsterEntity = makeMonsterEntity(10);
         Player playerDomain = makeDomainPlayer(100);
         Monster monsterDomain = makeDomainMonster(10);
-
-        Item lootItem = new Item();
-        lootItem.setId(501L);
-        lootItem.setName("Blue Herb");
-
-        ItemEntity lootEntity = new ItemEntity();
-        lootEntity.setId(501L);
-        lootEntity.setName("Blue Herb");
-
-        PlayerItemEntity existingStack = new PlayerItemEntity();
-        existingStack.setItem(lootEntity);
-        existingStack.setAmount(3);
-        existingStack.setPlayer(playerEntity);
 
         when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(playerEntity));
         when(monsterRepository.findById(MONSTER_ID)).thenReturn(Optional.of(monsterEntity));
         when(playerMapper.toDomain(playerEntity)).thenReturn(playerDomain);
         when(monsterMapper.toDomain(monsterEntity)).thenReturn(monsterDomain);
         when(battleEngine.calculateDamage(playerDomain, monsterDomain)).thenReturn(20);
-        when(battleEngine.calculateLoot(monsterDomain)).thenReturn(List.of(lootItem));
-        when(itemMapper.toEntity(lootItem)).thenReturn(lootEntity);
-        when(playerItemRepository.findByPlayerIdAndItemId(PLAYER_ID, 501L))
-                .thenReturn(List.of(existingStack));
+        when(battleEngine.calculateLoot(monsterDomain)).thenReturn(new ArrayList<>());
 
         battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
 
-        assertEquals(4, existingStack.getAmount(),
-                "Amount deve ser 3 existentes + 1 drop = 4");
-        verify(playerItemRepository).save(existingStack);
+        verify(eventPublisher).publishEvent(argThat((MonsterKilledEvent e) ->
+                e.baseExp() == 5L && e.jobExp() == 3L));
     }
 }

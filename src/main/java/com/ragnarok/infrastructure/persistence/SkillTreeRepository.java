@@ -1,5 +1,6 @@
 package com.ragnarok.infrastructure.persistence;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -9,6 +10,7 @@ public interface SkillTreeRepository extends JpaRepository<SkillTreeEntity, Inte
     List<SkillTreeEntity> findByJobClassIgnoreCase(String jobClass);
     List<SkillTreeEntity> findByJobClassIgnoreCaseAndSkillId(String jobClass, String skillId);
 
+    @Cacheable("skillTree")
     @Query("SELECT s FROM SkillTreeEntity s WHERE UPPER(s.jobClass) IN :upperJobClasses")
     List<SkillTreeEntity> findByJobClassesIn(@Param("upperJobClasses") List<String> upperJobClasses);
 

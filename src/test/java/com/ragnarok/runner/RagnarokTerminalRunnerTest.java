@@ -36,6 +36,7 @@ class RagnarokTerminalRunnerTest {
     @Mock private PlayerMapper playerMapper;
     @Mock private MapPortalRepository portalRepo;
     @Mock private SkillService skillService;
+    @Mock private SkillCombatService skillCombatService;
     @Mock private ClassChangeService classChangeService;
 
     @InjectMocks
@@ -68,7 +69,7 @@ class RagnarokTerminalRunnerTest {
     // ── Teste original: Ressuscitar após FATAL ────────────────────────────────
 
     @Test
-    @DisplayName("Runner: Deve ressuscitar jogador automaticamente ao receber FATAL do serviço")
+    @DisplayName("Runner: Deve resetar estado de batalha ao receber FATAL do serviço")
     void deveRessuscitarJogadorAposMorte() {
         System.setIn(new ByteArrayInputStream("1\n".getBytes()));
         ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
@@ -79,9 +80,10 @@ class RagnarokTerminalRunnerTest {
 
         ReflectionTestUtils.invokeMethod(runner, "renderBattleMenu");
 
-        verify(playerService).ressuscitarJogador(1L);
         boolean inBattle = (boolean) ReflectionTestUtils.getField(runner, "inBattle");
         assertFalse(inBattle);
+        assertNull(ReflectionTestUtils.getField(runner, "currentMonster"),
+                "currentMonster deve ser null após morte");
     }
 
     // ── moverParaMapa: troca mapName e salva player ───────────────────────────
@@ -98,13 +100,11 @@ class RagnarokTerminalRunnerTest {
         verify(playerRepo).save(playerMock);
     }
 
-    // ── handlePlayerDeath: inBattle=false, ressuscitar, mapa=prontera ─────────
+    // ── handlePlayerDeath: inBattle=false, currentMonster=null ───────────────
 
     @Test
-    @DisplayName("handlePlayerDeath: reseta inBattle, chama ressuscitar e move para prontera")
+    @DisplayName("handlePlayerDeath: reseta inBattle e currentMonster (ressurreição delegada ao BattleEventHandler)")
     void handlePlayerDeath_resetaBattleEMoveParaProntera() {
-        when(playerRepo.findById(1L)).thenReturn(Optional.of(playerMock));
-
         ReflectionTestUtils.invokeMethod(runner, "handlePlayerDeath");
 
         boolean inBattle = (boolean) ReflectionTestUtils.getField(runner, "inBattle");
@@ -112,11 +112,6 @@ class RagnarokTerminalRunnerTest {
 
         assertNull(ReflectionTestUtils.getField(runner, "currentMonster"),
                 "currentMonster deve ser null após morte");
-
-        verify(playerService).ressuscitarJogador(1L);
-        assertEquals("prontera", playerMock.getMapName(),
-                "mapName deve ser prontera após morte");
-        verify(playerRepo).save(playerMock);
     }
 
     // ── caminhar: branch 70% — encontro com monstro ──────────────────────────

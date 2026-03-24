@@ -1,247 +1,327 @@
 # Ragnarok Core — Hexagonal Architecture
 
-Este projeto é o núcleo (Core) de um sistema de emulação e gerenciamento de dados baseado no jogo **Ragnarok Online**. O projeto foi construído e refatorado para **Arquitetura Hexagonal (Ports and Adapters)**, desacoplando completamente as regras de negócio (Domínio) de frameworks externos, banco de dados e APIs. Toda a base de dados do jogo (monstros, itens, mapas, warps, drops, skills) é importada diretamente do servidor oficial **rAthena** (`db/re/` — versão Renewal).
+![CI](https://github.com/SilvioPLopes/ragnarok-core/actions/workflows/ci.yml/badge.svg)
+![Coverage](https://img.shields.io/badge/coverage-85%25%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-240%20passing-brightgreen)
+
+The core engine of a Ragnarok Online emulation and data-management system built on **Hexagonal Architecture (Ports and Adapters)**. All game data (monsters, items, maps, warps, drops, skills) is imported directly from the official **rAthena** server (`db/re/` — Renewal version).
 
 ---
 
-## Status do Projeto
+## Project Status
 
-| Sistema | Status | Detalhe |
+| System | Status | Details |
 |---|---|---|
-| Arquitetura Hexagonal | Operacional | Domain / Application / Infrastructure / Runner |
-| Dados rAthena | Operacional | 2675 monstros, todos os itens, 1864 warps, 2374 spawns, 12544 drops |
-| Navegação por Mapas | Operacional | Portais reais do rAthena, encontros ponderados por `amount` |
-| Engine de Batalha | Operacional | Dano físico, contra-ataque do monstro, modificadores elemental e de tamanho |
-| Sistema de Loot | Operacional | Taxas reais rAthena (0–100%), RNG, persistência no inventário |
-| Sistema de Nível | Operacional | Base/Job XP, Level Up automático, Full Heal, stat/skill points |
-| Distribuição de Stats | Operacional | Menu terminal para gastar `statPoints` (STR/AGI/VIT/INT/DEX/LUK) |
-| Sistema de Skills | Operacional | Árvore completa, pré-requisitos AND-logic, aprendizado com `skillPoints` |
-| Cadeia de Classes | Operacional | Skills de TODAS as classes anteriores visíveis e aprendíveis |
-| Efeitos de Skills | Operacional | Buffs, passivas, dano com fórmulas, custo SP, duração em turnos |
-| Modificadores de Tamanho | Operacional | Weapon vs. Small/Medium/Large com tabela real do jogo |
-| Troca de Classe | Operacional | Progressão NOVICE → Tier1 → Tier2 → Tier3 com validação de job level |
-| Startup Automático | Operacional | `StartupDataLoader` popula todas as tabelas estáticas no boot |
-| Cobertura de Testes | **195 testes** | Unit + Integração — zero falhas |
+| Hexagonal Architecture | Operational | Domain / Application / Infrastructure / Runner |
+| rAthena Data | Operational | 2675 monsters, all items, 1864 warps, 2374 spawns, 12544 drops |
+| Map Navigation | Operational | Real rAthena portals, weighted monster encounters by `amount` |
+| Battle Engine | Operational | Physical damage, monster counter-attack, elemental and size modifiers |
+| Loot System | Operational | Real rAthena drop rates (0–100%), RNG, inventory persistence |
+| Leveling System | Operational | Base/Job XP, auto Level Up, Full Heal, stat/skill points |
+| Stat Distribution | Operational | Terminal menu for spending `statPoints` (STR/AGI/VIT/INT/DEX/LUK) |
+| Skill System | Operational | Full tree, AND-logic prerequisites, learning with `skillPoints` |
+| Class Chain | Operational | Skills from ALL previous classes visible and learnable |
+| Skill Effects | Operational | Buffs, passives, formula-based damage, SP cost, duration in turns |
+| Size Modifiers | Operational | Weapon vs. Small/Medium/Large with real game table |
+| Class Change | Operational | NOVICE → Tier1 → Tier2 → Tier3 with job level validation |
+| Auto Startup | Operational | `StartupDataLoader` populates all static tables on boot |
+| Schema Management | Operational | Flyway V1 migration; Hibernate validates on startup |
+| Resilience4j | Operational | `@Retry` (3 attempts, 2 s exponential backoff) + `@CircuitBreaker` on rAthena download |
+| Spring Cache (Caffeine) | Operational | `weaponSizeModifiers`, `skillBuffEffects`, `skillTree`, `playerSkills` — zero repeated queries in battle |
+| REST API + Swagger UI | Operational | Full game loop via browser: Players, Battle, Skills, Inventory, Map — `GET /swagger-ui.html` |
+| Spring Events | Operational | `BattleService` publishes `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` handles loot, XP, resurrection |
+| Testcontainers | Operational | All integration tests use an ephemeral PostgreSQL container — no local DB required for `./mvnw test` |
+| Test Coverage | **240 tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
 
 ---
 
-## Arquitetura e Organização
+## Architecture & Organization
 
-O projeto segue estritamente a separação de responsabilidades da arquitetura hexagonal:
+The project strictly follows the separation of concerns of hexagonal architecture:
 
 ### 1. Domain (`com.ragnarok.domain`)
 
-**O coração do sistema.** Contém a lógica de negócio e os modelos puros.
+**The heart of the system.** Contains pure business logic and models.
 
-- **Regra de Ouro:** Sem dependências de frameworks. Sem `@Entity`, `@Table` ou qualquer anotação Spring/Hibernate.
-- Usa tipos fortes (`Integer`, `Double`) para cálculos matemáticos seguros.
-- `BattleEngine` e `LevelingService` são serviços puros — testáveis sem banco de dados.
+- **Golden Rule:** No framework dependencies. No `@Entity`, `@Table`, or any Spring/Hibernate annotations.
+- Uses strong types (`Integer`, `Double`) for safe mathematical calculations.
+- `BattleEngine` and `LevelingService` are pure services — testable without a database.
 
 ### 2. Application (`com.ragnarok.application`)
 
-**A camada de orquestração (Use Cases).** Recebe comandos, busca dados pelas portas e coordena o fluxo.
+**The orchestration layer (Use Cases).** Receives commands, fetches data through ports, and coordinates flow.
 
-| Serviço | Responsabilidade |
+| Service | Responsibility |
 |---|---|
-| `BattleService` | Ciclo de combate, morte, loot e XP |
-| `SkillService` | Listagem por cadeia de classes, validação de pré-requisitos, aprendizado e uso de skills |
-| `ClassChangeService` | Progressão de classe com validação de job level |
-| `ItemService` | Gestão de inventário, equip/unequip, auto-swap de slot |
-| `PlayerService` | Criação e gerenciamento de personagens |
-| `MonsterCatalogService` | ETL de monstros via API externa |
-| `WeaponSizeService` | Consulta de modificadores de tamanho por tipo de arma e tamanho de monstro |
-| `ScriptInterpreter` | Motor de avaliação de fórmulas de skills (`"ATK * skill_lv * 1.3"`) |
+| `BattleService` | Combat turn: damage, counter-attack, weapon-size modifier; publishes `MonsterKilledEvent` / `PlayerDiedEvent` |
+| `BattleEventHandler` | `@EventListener`: persists loot, processes XP via `LevelingService`, publishes `PlayerLeveledUpEvent`, resurrects player |
+| `SkillService` | Class-chain listing, prerequisite validation, and skill learning |
+| `SkillCombatService` | Skill usage in combat: HEAL, BUFF, PHYSICAL_DAMAGE, MAGICAL_DAMAGE |
+| `ClassChangeService` | Class progression with job level validation |
+| `ItemService` | Inventory management, equip/unequip, auto slot-swap |
+| `MapService` | Current map info, portal listing, walk (random encounter), and travel between maps |
+| `PlayerService` | Character creation and management |
+| `MonsterCatalogService` | Monster ETL via external API |
+| `WeaponSizeService` | Size modifier lookup by weapon type and monster size (`@Cacheable`) |
+| `ScriptInterpreter` | Formula evaluation engine (`"ATK * skill_lv * 1.3"`) |
 
-### 3. Infrastructure (`com.ragnarok.infrastructure`)
+### 3. REST API (`com.ragnarok.api`)
 
-**Os adaptadores para o mundo externo.**
+Exposes the full game loop as a REST API with OpenAPI documentation via **springdoc-openapi**.
 
-- **Client:** Comunicação com a API Ragnapi. Usa DTOs imutáveis (Records) com campos `String` para tolerar dados malformatados.
-- **Persistence:** Comunicação com PostgreSQL via JPA. Entities com `@Entity` e estratégia de Flattening.
-- **Mapper:** Ponte tradutora. Converte `DTO → Domain → Entity`, aplicando sanitização e safe unboxing.
-- **`BuffSerializer`:** Serializa/desserializa a lista de `ActiveBuff` como JSON na coluna `active_buffs_json` do player.
+| Controller | Endpoints |
+|---|---|
+| `PlayerController` | `GET /api/players`, `GET /api/players/{id}`, `POST /api/players` |
+| `BattleController` | `POST /api/battle/attack` |
+| `SkillController` | `GET /api/players/{id}/skills`, `POST .../learn`, `POST .../use` |
+| `ItemController` | `GET /api/players/{id}/inventory`, `POST .../inventory/{itemId}/use` |
+| `MapController` | `GET /api/players/{id}/map`, `GET /api/maps/{mapId}/portals`, `POST .../walk`, `POST .../travel` |
+| `GlobalExceptionHandler` | `@RestControllerAdvice`: maps domain exceptions to HTTP 400/404/500 |
 
-### 4. Runner (`com.ragnarok.runner`)
+**Swagger UI:** `http://localhost:8080/swagger-ui.html` — interactive docs for all 5 groups without cloning the repo.
 
-| Classe | Ordem | Função |
+### 4. Infrastructure (`com.ragnarok.infrastructure`)
+
+**Adapters to the outside world.**
+
+- **Client:** Communication with the Ragnapi API. Uses immutable DTOs (Records) with `String` fields to tolerate malformed data.
+- **Persistence:** PostgreSQL communication via JPA. Entities use `@Entity` with a Flattening strategy.
+- **Mapper:** Translator bridge. Converts `DTO → Domain → Entity`, applying sanitization and safe unboxing.
+- **`BuffSerializer`:** Serializes/deserializes the `ActiveBuff` list as JSON in the player's `active_buffs_json` column.
+
+### 5. Runner (`com.ragnarok.runner`)
+
+| Class | Order | Function |
 |---|---|---|
-| `RathenaImporter` | `@Order(1)` | Importa monstros e itens do rAthena GitHub automaticamente no startup |
-| `MockMapLoader` | `@Order(2)` | Cria o player inicial |
-| `StartupDataLoader` | `@Order(3)` | Popula `maps`, `map_portals`, `map_monsters`, `monster_drops`, `skills`, `skill_tree`, `skill_buff_effects` e `weapon_size_modifiers` a partir dos SQLs em `src/main/resources/db/` |
-| `RagnarokTerminalRunner` | — | UI do terminal, game loop de exploração e combate |
+| `RathenaImporter` | `@Order(1)` | Imports monsters and items from rAthena GitHub automatically on startup |
+| `PlayerSeedLoader` | `@Order(2)` | Creates the initial player |
+| `StartupDataLoader` | `@Order(3)` | Populates `maps`, `map_portals`, `map_monsters`, `monster_drops`, `skills`, `skill_tree`, `skill_buff_effects`, and `weapon_size_modifiers` from SQLs in `src/main/resources/db/` |
+| `RagnarokTerminalRunner` | — | Terminal UI, exploration and combat game loop |
 
 ---
 
-## Fluxos de Dados Implementados
+## Data Flows
 
 ### 1. Monster Catalog (ETL & Data Mining)
 
-Fluxo resiliente que carrega dados externos, sanitiza inconsistências e realiza mineração de dados relacionais.
+Resilient flow that loads external data, sanitizes inconsistencies, and performs relational data mining.
 
 1. **Trigger:** `MonsterCatalogService.carregarESalvarMonstro(Long id)`
-2. **Busca (Client):** `RagnapiClient` consome a API externa — input: JSON "sujo" (`"hp": "10,000"`, `"name": "scorpion"`)
-3. **Sanitização (Mapper):** `MonsterMapper.toDomain(dto)` — remove vírgulas, normaliza strings, garante tipagem forte (`String → Integer`)
-4. **Domínio:** Instanciação do objeto `Monster` puro para cálculos seguros
-5. **Persistência (Mapper):** `MonsterMapper.toEntity(domain)` aplica **Flattening** (achata objetos aninhados em colunas planas)
-6. **Mineração Automática:** Drops identificados; itens inexistentes viram placeholders. Spawns populam `maps` e `map_monsters`
+2. **Fetch (Client):** `RagnapiClient` consumes external API — input: "dirty" JSON (`"hp": "10,000"`, `"name": "scorpion"`)
+3. **Sanitization (Mapper):** `MonsterMapper.toDomain(dto)` — removes commas, normalizes strings, ensures strong typing (`String → Integer`)
+4. **Domain:** Instantiation of pure `Monster` object for safe calculations
+5. **Persistence (Mapper):** `MonsterMapper.toEntity(domain)` applies **Flattening** (flattens nested objects into flat columns)
+6. **Automatic Mining:** Drops identified; non-existent items become placeholders. Spawns populate `maps` and `map_monsters`
 
 ### 2. Character Creation (Factory & Persistence)
 
-1. **Trigger:** `PlayerService.criarNovoPersonagem(nome, classe)`
-2. **Domínio:** Nível 1, HP 100/100, localização: Prontera
-3. **Mapeamento:** `PlayerMapper` converte `PlayerStats`, `PlayerLocation` para colunas planas
-4. **Persistência:** Commit transacional no PostgreSQL
+1. **Trigger:** `PlayerService.criarNovoPersonagem(name, class)`
+2. **Domain:** Level 1, HP 100/100, location: Prontera
+3. **Mapping:** `PlayerMapper` converts `PlayerStats`, `PlayerLocation` to flat columns
+4. **Persistence:** Transactional commit to PostgreSQL
 
 ### 3. Item Management (Inventory & Equipment)
 
-1. **Inventário UUID:** Cada item tem UUID único em `player_items`, suportando múltiplas instâncias do mesmo item
-2. **Auto-Swap:** `ItemService` identifica o `EquipSlot` do novo item, remove o item equipado no slot e equipa o novo em uma única transação atômica
-3. **Loot Persistido:** Taxa de drop (`rate`) armazenada em escala 0–100 (normalizada a partir da escala rAthena 0–10000 na ingestão SQL)
+1. **UUID Inventory:** Each item has a unique UUID in `player_items`, supporting multiple instances of the same item
+2. **Auto-Swap:** `ItemService` identifies the `EquipSlot` of the new item, removes the equipped item in the same slot, and equips the new one in a single atomic transaction
+3. **Persisted Loot:** Drop rate (`rate`) stored at 0–100 scale (normalized from rAthena's 0–10000 scale during SQL ingestion)
 
 ### 4. Battle & Progression (Engine & Leveling)
 
 1. **Trigger:** `BattleService.realizarAtaque(playerId, monsterId)`
-2. **Combate (Engine):** `BattleEngine` calcula `(STR*2 + WeaponATK) - EnemyDEF`; aplica modificador elemental e de tamanho de arma
-3. **Counter-ataque:** Monstro responde no mesmo turno com `ATK - PlayerDEF`
-4. **Loot (RNG):** Na morte do monstro, `nextDouble(0, 100) < rate` determina cada drop; itens salvos em `player_items`
-5. **XP & Level Up:** `LevelingService` processa base/job XP, verifica curva (`Nível * 100`), aplica Full Heal, +5 stat points, +1 skill point por level up
+2. **Combat (Engine):** `BattleEngine` calculates `(STR*2 + WeaponATK) - EnemyDEF`; applies elemental and weapon-size modifier
+3. **Counter-attack:** Monster responds in the same turn with `ATK - PlayerDEF`
+4. **Loot (RNG):** On monster death, `nextDouble(0, 100) < rate` determines each drop; items saved in `player_items`
+5. **XP & Level Up:** `LevelingService` processes base/job XP, checks curve (`Level * 100`), applies Full Heal, +5 stat points, +1 skill point per level up
 
 ### 5. World Navigation (Map & Portals)
 
-1. **Trigger:** Jogador seleciona "Portais" no menu de exploração
-2. **Consulta:** `MapPortalRepository.findDestinosByMapFrom(mapaAtual)` retorna destinos disponíveis
-3. **Viagem:** `PlayerEntity.mapName` atualizado e persistido
-4. **Encontro:** Monstro sorteado por peso proporcional ao `amount` do spawn em `map_monsters`
-5. **Morte:** Player revive em `prontera`, `mapName` resetado
+1. **Trigger:** Player selects "Portais" in the exploration menu
+2. **Query:** `MapPortalRepository.findDestinosByMapFrom(currentMap)` returns available destinations
+3. **Travel:** `PlayerEntity.mapName` updated and persisted
+4. **Encounter:** Monster drawn by weight proportional to `amount` in `map_monsters`
+5. **Death:** Player revives in `prontera`, `mapName` reset
 
-### 6. Skills System (Aprendizado, Pré-requisitos e Cadeia de Classes)
+### 6. Skills System (Learning, Prerequisites, and Class Chain)
 
-1. **Trigger:** Menu de Status → tecla `S`
-2. **Cadeia de Classes:** `SkillService.resolveClassChain` percorre o campo `parentClass` do enum `JobClass` e retorna todas as classes da progressão. Ex.: `LORD_KNIGHT → [LORD_KNIGHT, KNIGHT, SWORDSMAN]`
-3. **Listagem:** `listarSkillsDoPlayer` busca a `skill_tree` para **toda a cadeia** — o player LORD_KNIGHT vê e pode aprender skills `LK_*`, `KN_*` e `SM_*`
-4. **Pré-requisitos AND-logic:** Uma skill com múltiplas linhas na `skill_tree` exige **todos** os pré-requisitos satisfeitos
-5. **Aprendizado:** `aprenderSkill` valida classe/cadeia, pré-requisitos, nível máximo e `skillPoints`. Faz upsert em `player_skills` e decrementa `skillPoints`
-6. **Passivas imediatas:** Ao aprender uma skill `PASSIVE`, os bônus são aplicados instantaneamente via `ActiveBuff` com `durationTurns = -1` (permanente)
+1. **Trigger:** Status Menu → key `S`
+2. **Class Chain:** `SkillService.resolveClassChain` traverses the `parentClass` field of the `JobClass` enum and returns all classes in the progression. E.g.: `LORD_KNIGHT → [LORD_KNIGHT, KNIGHT, SWORDSMAN]`
+3. **Listing:** `listarSkillsDoPlayer` queries `skill_tree` for **the entire chain** — a LORD_KNIGHT sees and can learn `LK_*`, `KN_*`, and `SM_*` skills
+4. **AND-logic Prerequisites:** A skill with multiple rows in `skill_tree` requires **all** prerequisites satisfied
+5. **Learning:** `aprenderSkill` validates class/chain, prerequisites, max level, and `skillPoints`. Upserts in `player_skills` and decrements `skillPoints`
+6. **Immediate Passives:** When learning a `PASSIVE` skill, bonuses are applied instantly via `ActiveBuff` with `durationTurns = -1` (permanent)
 
-### 7. Skill Effects System (Buffs, Passivas e Dano)
+### 7. Skill Effects System (Buffs, Passives, and Damage)
 
-1. **Fórmulas dinâmicas:** `ScriptInterpreter.evaluateFormula` avalia expressões como `"ATK * skill_lv * 1.3"` ou `"skill_lv * 2"` em runtime
-2. **BUFF:** Ao usar a skill, os efeitos são lidos de `skill_buff_effects`, calculados e aplicados como `ActiveBuff` com duração. Resposta inclui os valores concretos: `"SM_ENDURE (Lv1). Efeito dura 7 turnos. [DEF +2, M_DEF +4]"`
-3. **PASSIVE:** Aplicada ao aprender. Bônus permanente armazenado em `active_buffs_json` do player
-4. **PHYSICAL_DAMAGE / MAGICAL_DAMAGE:** Fórmula avaliada com stats do player; modificador elemental e de tamanho de arma aplicados
-5. **HEAL:** Fórmula avaliada para curar HP do player
-6. **Modificador de Tamanho:** `WeaponSizeService` consulta `weapon_size_modifiers` para retornar o percentual de dano arma × tamanho do monstro (Small/Medium/Large)
+1. **Dynamic Formulas:** `ScriptInterpreter.evaluateFormula` evaluates expressions like `"ATK * skill_lv * 1.3"` or `"skill_lv * 2"` at runtime
+2. **BUFF:** When using the skill, effects are read from `skill_buff_effects`, calculated, and applied as `ActiveBuff` with duration. Response shows concrete values: `"SM_ENDURE (Lv1). Effect lasts 7 turns. [DEF +2, M_DEF +4]"`
+3. **PASSIVE:** Applied on learning. Permanent bonus stored in player's `active_buffs_json`
+4. **PHYSICAL_DAMAGE / MAGICAL_DAMAGE:** Formula evaluated with player stats; elemental and weapon-size modifiers applied
+5. **HEAL:** Formula evaluated to restore player HP
+6. **Size Modifier:** `WeaponSizeService` queries `weapon_size_modifiers` for the damage percentage by weapon × monster size (Small/Medium/Large)
 
-### 8. Safety & Resilience (Null Safety)
+### 8. Spring Events — Decoupled Battle Pipeline
 
-1. **Mapper Blindado:** `PlayerMapper` implementa Safe Unboxing — `NULL` em campos numéricos (XP, Pontos, Zenny) é convertido para `0` antes de instanciar o Domínio, prevenindo `NullPointerException`
-2. **Drop Rate Seguro:** `MonsterMapper.mapDrop` trata `rate = null` como `0.0` — item nunca dropa por acidente
-3. **WHERE EXISTS duplo:** `monster_drops.sql` e `map_monsters.sql` usam `WHERE EXISTS` para validar FK antes de inserir, garantindo zero violações mesmo com banco parcialmente populado
+`BattleService` publishes domain events via `ApplicationEventPublisher` instead of calling other services directly. All side-effects of combat are handled asynchronously (but synchronously in the same transaction) by `BattleEventHandler`.
+
+```
+realizarAtaque()
+  └─ monster HP ≤ 0
+       └─ battleEngine.calculateLoot(monster)
+       └─ eventPublisher.publishEvent(MonsterKilledEvent)   ← same TX
+            └─ BattleEventHandler.onMonsterKilled()
+                 ├─ persist loot → player_items
+                 ├─ levelingService.processarExperiencia()
+                 ├─ save PlayerEntity (base/job level, XP, stat/skill points)
+                 └─ if leveled up → publishEvent(PlayerLeveledUpEvent)
+
+  └─ player HP ≤ 0
+       └─ eventPublisher.publishEvent(PlayerDiedEvent)       ← same TX
+            └─ BattleEventHandler.onPlayerDied()
+                 ├─ hpCurrent = hpMax
+                 └─ mapName = "prontera"
+```
+
+**Domain events:**
+
+| Event | Fields | Publisher | Handler |
+|---|---|---|---|
+| `MonsterKilledEvent` | `playerId`, `monsterId`, `List<Item> loot`, `baseExp`, `jobExp` | `BattleService` | `BattleEventHandler.onMonsterKilled` |
+| `PlayerDiedEvent` | `playerId` | `BattleService` | `BattleEventHandler.onPlayerDied` |
+| `PlayerLeveledUpEvent` | `playerId`, `newBaseLevel`, `newJobLevel` | `BattleEventHandler` | — (logged) |
+
+### 9. Safety & Resilience (Null Safety)
+
+1. **Shielded Mapper:** `PlayerMapper` implements Safe Unboxing — `NULL` in numeric fields (XP, Points, Zenny) is converted to `0` before instantiating the Domain, preventing `NullPointerException`
+2. **Safe Drop Rate:** `MonsterMapper.mapDrop` treats `rate = null` as `0.0` — item never drops accidentally
+3. **Double WHERE EXISTS:** `monster_drops.sql` and `map_monsters.sql` use `WHERE EXISTS` to validate FKs before inserting, guaranteeing zero violations even with a partially populated database
 
 ---
 
-## Banco de Dados
+## Database
 
 **URL:** `jdbc:postgresql://localhost:5432/ragnarok_db`
-**User:** `postgres` / **Password:** *(variável de ambiente `DB_PASS`, padrão local: `postgre`)*
+**User:** `postgres` / **Password:** *(environment variable `DB_PASS`, local default: `postgre`)*
 
-| Tabela | Origem | Descrição |
+Schema is managed by **Flyway** (`db/migration/V1__initial_schema.sql`). Hibernate validates on startup.
+
+| Table | Source | Description |
 |---|---|---|
-| `monsters` | RathenaImporter (startup) | 2675 monstros do `db/re/mob_db.yml` |
-| `items` | RathenaImporter (startup) | Itens de `db/re/item_db_usable/equip/etc.yml` |
-| `maps` | `maps.sql` | Todos os mapas do `db/map_index.txt` |
-| `map_portals` | `map_portals_v2.sql` | 1864 warps de `npc/re/warps/` |
-| `map_monsters` | `map_monsters.sql` | 2374 spawns de `npc/re/mobs/` com peso (`amount`) |
-| `monster_drops` | `monster_drops.sql` | 12544 drops; `rate` em escala 0–100 (rAthena ÷ 100) |
-| `players` | MockMapLoader (startup) | Jogador inicial |
-| `player_items` | Gerado em combate | Inventário (UUID PK, `is_equipped`, `amount`) |
-| `skills` | `skills.sql` + `forceLoad` | Catálogo: `aegis_name`, `name`, `effect_type`, `damage_formula`, `sp_cost`, `duration_turns` |
-| `skill_tree` | `skill_tree.sql` | Árvore por classe: `job_class`, `skill_id`, `max_level`, `prereq_skill`, `prereq_level` |
-| `skill_buff_effects` | `skill_effects.sql` | Efeitos de buff/passiva por skill: `stat_type`, `value_formula` |
-| `player_skills` | JPA ddl-auto | Skills aprendidas: `player_id`, `skill_id`, `current_level` |
-| `weapon_size_modifiers` | `weapon_size_modifiers.sql` | Modificadores de dano: `weapon_type`, `monster_size`, `modifier_percent` |
-| `monster_spawns` | Legado | Substituído por `map_monsters` |
+| `monsters` | RathenaImporter (startup) | 2675 monsters from `db/re/mob_db.yml` |
+| `items` | RathenaImporter (startup) | Items from `db/re/item_db_usable/equip/etc.yml` |
+| `maps` | `maps.sql` | All maps from `db/map_index.txt` |
+| `map_portals` | `map_portals_v2.sql` | 1864 warps from `npc/re/warps/` |
+| `map_monsters` | `map_monsters.sql` | 2374 spawns from `npc/re/mobs/` with weight (`amount`) |
+| `monster_drops` | `monster_drops.sql` | 12544 drops; `rate` at 0–100 scale (rAthena ÷ 100) |
+| `players` | PlayerSeedLoader (startup) | Initial player |
+| `player_items` | Generated in combat | Inventory (UUID PK, `is_equipped`, `amount`) |
+| `skills` | `skills.sql` + `forceLoad` | Catalog: `aegis_name`, `name`, `effect_type`, `damage_formula`, `sp_cost`, `duration_turns` |
+| `skill_tree` | `skill_tree.sql` | Tree by class: `job_class`, `skill_id`, `max_level`, `prereq_skill`, `prereq_level` |
+| `skill_buff_effects` | `skill_effects.sql` | Buff/passive effects per skill: `stat_type`, `value_formula` |
+| `player_skills` | JPA (test) / Flyway (prod) | Learned skills: `player_id`, `skill_id`, `current_level` |
+| `weapon_size_modifiers` | `weapon_size_modifiers.sql` | Damage modifiers: `weapon_type`, `small_pct`, `medium_pct`, `large_pct` |
 
-### Resetando dados do banco
+### Resetting database data
 
 ```sql
--- Reimportar itens (força RathenaImporter no próximo startup):
+-- Re-import items (forces RathenaImporter on next startup):
 DELETE FROM items;
 
--- Skills são sempre atualizadas via forceLoad — não precisam de DELETE manual.
+-- Skills are always updated via forceLoad — no manual DELETE needed.
 
--- Reset completo (respeitar ordem de FK):
+-- Full reset (respect FK order):
 DELETE FROM monster_drops;
 DELETE FROM map_monsters;
-DELETE FROM monster_spawns;
 DELETE FROM monsters;
 DELETE FROM items;
 ```
 
-> Na próxima inicialização, `RathenaImporter` detecta `itemRepo.count() == 0` e reimporta automaticamente. O `StartupDataLoader` recarrega todos os SQLs estáticos.
+> On the next startup, `RathenaImporter` detects `itemRepo.count() == 0` and re-imports automatically. `StartupDataLoader` reloads all static SQLs.
 
-### Startup automático
+### Auto startup
 
-**Nenhum script manual necessário.** O `StartupDataLoader` (`@Order(3)`) popula todas as tabelas estáticas no boot se estiverem vazias. O console exibe o progresso:
+**No manual scripts required.** `StartupDataLoader` (`@Order(3)`) populates all static tables on boot if they are empty. The console shows progress:
 
 ```
-Populando map_monsters    a partir de db/map_monsters.sql...
-map_monsters    populada com 2374 registros.
+Populating 'map_monsters' from db/map_monsters.sql...
+Table 'map_monsters' populated with 2374 rows.
 ```
 
-> Os SQLs ficam em `src/main/resources/db/`. Os scripts Python em `scriptsPython/` são usados **apenas para regenerar** os SQLs quando os dados do rAthena mudam.
+> SQLs are in `src/main/resources/db/`. Python scripts in `scriptsPython/` are used **only to regenerate** the SQLs when rAthena data changes.
 
 ---
 
-## Scripts Python (`scriptsPython/`)
+## Python Scripts (`scriptsPython/`)
 
-Pipeline ETL que extrai dados diretamente dos repositórios do rAthena via GitHub e gera os SQLs para o banco.
+ETL pipeline that extracts data directly from rAthena repositories via GitHub and generates the SQLs for the database.
 
-| Script | Função |
+| Script | Function |
 |---|---|
-| `Migrate.py` | Executa todos os SQLs no banco em ordem correta |
-| `map_parser.py` | Gera `maps.sql` a partir de `db/map_index.txt` |
-| `warp_parser.py` | Gera `map_portals_v2.sql` de `npc/re/warps/` |
-| `mob_parser.py` | Gera `map_monsters.sql` de `npc/re/mobs/` |
-| `drop_parser.py` | Gera `monster_drops.sql` de `db/re/mob_db.yml`; normaliza rate: `rAthena_rate / 100.0` |
-| `skill_parser.py` | Gera `skill_tree.sql` de `db/re/skill_tree.txt` |
+| `Migrate.py` | Runs all SQLs in the correct order |
+| `map_parser.py` | Generates `maps.sql` from `db/map_index.txt` |
+| `warp_parser.py` | Generates `map_portals_v2.sql` from `npc/re/warps/` |
+| `mob_parser.py` | Generates `map_monsters.sql` from `npc/re/mobs/` |
+| `drop_parser.py` | Generates `monster_drops.sql` from `db/re/mob_db.yml`; normalizes rate: `rAthena_rate / 100.0` |
+| `skill_parser.py` | Generates `skill_tree.sql` from `db/re/skill_tree.txt` |
 
-**Dependências Python:**
+**Python dependencies:**
 ```bash
 pip install requests pyyaml psycopg2-binary --break-system-packages
 ```
 
 ---
 
-## Estrutura de Pastas
+## Folder Structure
 
 ```text
 com.ragnarok
+├── api
+│   ├── GlobalExceptionHandler.java       # @RestControllerAdvice — maps exceptions to HTTP codes
+│   ├── controller
+│   │   ├── BattleController.java         # POST /api/battle/attack
+│   │   ├── ItemController.java           # GET/POST /api/players/{id}/inventory
+│   │   ├── MapController.java            # GET/POST /api/players/{id}/map
+│   │   ├── PlayerController.java         # GET/POST /api/players
+│   │   └── SkillController.java          # GET/POST /api/players/{id}/skills
+│   └── dto
+│       ├── request/                      # AttackRequestDTO, CreatePlayerRequestDTO, TravelRequestDTO, UseSkillRequestDTO
+│       └── response/                     # PlayerResponseDTO, BattleResponseDTO, SkillRowResponseDTO,
+│                                         # InventoryItemResponseDTO, MapInfoResponseDTO, WalkResponseDTO
+│
 ├── application
+│   ├── dto
+│   │   ├── SkillRowDTO.java              # Public record for skill display in the terminal
+│   │   └── WalkResult.java              # record: encounterOccurred, monsterId, message
 │   └── service
-│       ├── BattleService.java           # Ciclo de combate, loot, XP
-│       ├── ClassChangeService.java      # Progressão de classe
-│       ├── ItemService.java             # Inventário, equip, auto-swap
-│       ├── MonsterCatalogService.java   # ETL monstros via API
-│       ├── PlayerService.java           # Criação e gestão de personagens
-│       ├── ScriptInterpreter.java       # Motor de fórmulas: "ATK * skill_lv * 1.3"
-│       ├── SkillRowDTO.java             # Record público para exibição de skill no terminal
-│       ├── SkillService.java            # Listagem (cadeia de classes), aprendizado, uso
-│       └── WeaponSizeService.java       # Modificador de dano: weapon_type × monster_size
+│       ├── BattleEventHandler.java       # @EventListener: loot persistence, XP, resurrection
+│       ├── BattleService.java            # Combat turn; publishes MonsterKilledEvent / PlayerDiedEvent
+│       ├── ClassChangeService.java       # Class progression
+│       ├── ItemService.java              # Inventory, equip, auto-swap
+│       ├── MapService.java               # Current map, portals, walk, travel
+│       ├── MonsterCatalogService.java    # Monster ETL via external API
+│       ├── PlayerService.java            # Character creation and management
+│       ├── ScriptInterpreter.java        # Formula engine: "ATK * skill_lv * 1.3"
+│       ├── SkillCombatService.java       # Skill usage in combat (HEAL, BUFF, DAMAGE)
+│       ├── SkillService.java             # Listing (class chain), learning, passive application
+│       └── WeaponSizeService.java        # Damage modifier: weapon_type × monster_size (@Cacheable)
 │
 ├── domain
+│   ├── event
+│   │   ├── MonsterKilledEvent.java       # record(playerId, monsterId, List<Item> loot, baseExp, jobExp)
+│   │   ├── PlayerDiedEvent.java          # record(playerId)
+│   │   └── PlayerLeveledUpEvent.java     # record(playerId, newBaseLevel, newJobLevel)
 │   ├── model
-│   │   ├── ActiveBuff.java             # Buff ativo (skill, stat, valor, turnos restantes)
+│   │   ├── ActiveBuff.java              # Active buff (skill, stat, value, remaining turns)
 │   │   ├── BattleResult.java
 │   │   ├── BuffFlag.java
-│   │   ├── EffectResult.java           # Resultado de avaliação de script legado
+│   │   ├── EffectResult.java            # Legacy script evaluation result
 │   │   ├── ElementalDamage.java
 │   │   ├── EquipSlot.java
 │   │   ├── Item.java
 │   │   ├── ItemDropInfo.java
-│   │   ├── ItemStats.java              # Value Object de stats de equipamento
+│   │   ├── ItemStats.java               # Equipment stats Value Object
 │   │   ├── ItemType.java
-│   │   ├── JobClass.java               # Enum completo com tier, parentClass e stats base
+│   │   ├── JobClass.java                # Full enum with tier, parentClass, and base stats
 │   │   ├── MainAttributes.java
 │   │   ├── MainStats.java
 │   │   ├── Monster.java
@@ -250,165 +330,193 @@ com.ragnarok
 │   │   ├── PlayerItem.java
 │   │   ├── PlayerLocation.java
 │   │   ├── PlayerStats.java
-│   │   ├── SkillEffectType.java        # Enum: PHYSICAL_DAMAGE, MAGICAL_DAMAGE, BUFF, HEAL, PASSIVE
-│   │   ├── SkillElement.java           # Enum: NEUTRAL, FIRE, WATER, WIND, EARTH, HOLY, SHADOW...
-│   │   ├── StatType.java               # Enum: STR, AGI, VIT, INT, DEX, LUK, DEF, M_DEF, FLEE...
-│   │   └── WeaponType.java             # Enum: SWORD, DAGGER, SPEAR, BOW, STAFF, MACE, NONE...
+│   │   ├── SkillEffectType.java         # Enum: PHYSICAL_DAMAGE, MAGICAL_DAMAGE, BUFF, HEAL, PASSIVE
+│   │   ├── SkillElement.java            # Enum: NEUTRAL, FIRE, WATER, WIND, EARTH, HOLY, SHADOW...
+│   │   ├── StatType.java                # Enum: STR, AGI, VIT, INT, DEX, LUK, DEF, M_DEF, FLEE...
+│   │   └── WeaponType.java              # Enum: SWORD, DAGGER, SPEAR, BOW, STAFF, MACE, NONE...
 │   └── service
-│       ├── BattleEngine.java           # Dano, loot RNG, modificadores — zero dependência de banco
-│       └── LevelingService.java        # Curva de XP, Level Up, recompensas
+│       ├── BattleEngine.java            # Damage, loot RNG, modifiers — zero database dependency
+│       └── LevelingService.java         # XP curve, Level Up, rewards
 │
 └── infrastructure
     ├── client
     │   ├── RagnapiClient.java
     │   ├── dto
     │   │   ├── ItemDTO.java
-    │   │   └── MonsterDTO.java          # Record imutável, campos String para tolerar dados sujos
+    │   │   └── MonsterDTO.java           # Immutable record, String fields to tolerate dirty data
     │   └── mapper
     │       ├── ItemMapper.java
-    │       ├── MonsterMapper.java       # Sanitização + rate de drop sem divisão (banco já normalizado)
-    │       └── PlayerMapper.java        # Safe Unboxing (NULL → 0)
+    │       ├── MonsterMapper.java        # Sanitization + drop rate without division (DB already normalized)
+    │       └── PlayerMapper.java         # Safe Unboxing (NULL → 0)
     │
     └── persistence
         ├── GameMapEntity.java / Repository
         ├── ItemEntity.java / Repository
-        ├── MapMonsterEntity.java / Repository    # Spawns com amount (peso ponderado)
+        ├── MapMonsterEntity.java / Repository     # Spawns with amount (weighted draw)
         ├── MapPortalEntity.java / Repository
         ├── MonsterDropEntity.java
         ├── MonsterEntity.java / Repository
-        ├── MonsterSpawnEntity.java / Repository  # Legado
         ├── PlayerEntity.java / Repository
-        ├── PlayerItemEntity.java / Repository    # UUID PK, is_equipped, amount
+        ├── PlayerItemEntity.java / Repository     # UUID PK, is_equipped, amount
         ├── PlayerSkillEntity.java / Repository
-        ├── SkillBuffEffectEntity.java / Repository  # stat_type + value_formula por skill
+        ├── SkillBuffEffectEntity.java / Repository  # stat_type + value_formula per skill
         ├── SkillEntity.java / Repository
-        ├── SkillTreeEntity.java / Repository     # findByJobClassesIn (cadeia de classes)
+        ├── SkillTreeEntity.java / Repository      # findByJobClassesIn (class chain)
         ├── WeaponSizeModifierEntity.java / Repository
         └── mapper
-            ├── BuffSerializer.java               # JSON ↔ List<ActiveBuff>
+            ├── BuffSerializer.java                # JSON ↔ List<ActiveBuff>
             └── PlayerMapper.java
 ```
 
 ---
 
-## Dicionário de Classes Chave
+## Key Classes
 
 ### Domain Models
 
-| Classe | Descrição |
+| Class | Description |
 |---|---|
-| `Monster` | Modelo rico com `MainStats`, `ElementalDamage`, lista de `MonsterDrop` |
-| `Player` | Modelo rico com inventário, `statPoints`, `skillPoints`, `xp`, `mapName`, `activeBuffs` |
-| `Item` | Modelo puro com `ItemStats` (Value Object) e `WeaponType` |
-| `MonsterDrop` | Associa `Item` a `rate` (Double, escala 0–100) |
-| `ActiveBuff` | Buff ativo: skill de origem, `StatType`, valor e `durationTurns` (-1 = permanente) |
-| `JobClass` | Enum com todos os jobs (Tier 0–4), `parentClass` para cadeia de progressão e stats base por classe |
+| `Monster` | Rich model with `MainStats`, `ElementalDamage`, list of `MonsterDrop` |
+| `Player` | Rich model with inventory, `statPoints`, `skillPoints`, `xp`, `mapName`, `activeBuffs` |
+| `Item` | Pure model with `ItemStats` (Value Object) and `WeaponType` |
+| `MonsterDrop` | Associates `Item` with `rate` (Double, 0–100 scale) |
+| `ActiveBuff` | Active buff: source skill, `StatType`, value, and `durationTurns` (-1 = permanent) |
+| `JobClass` | Enum with all jobs (Tier 0–4), `parentClass` for progression chain, and base stats per class |
+
+### Domain Events
+
+| Event | Description |
+|---|---|
+| `MonsterKilledEvent` | Published by `BattleService` when monster HP reaches 0; carries loot list, baseExp, jobExp |
+| `PlayerDiedEvent` | Published by `BattleService` when player HP reaches 0; triggers resurrection in `BattleEventHandler` |
+| `PlayerLeveledUpEvent` | Published by `BattleEventHandler` when base or job level increases |
 
 ### Domain Services
 
-| Classe | Descrição |
+| Class | Description |
 |---|---|
-| `BattleEngine` | Fórmula de dano `(STR*2 + WeaponATK) - DEF`, RNG de loot `nextDouble(0,100) < rate`, modificador elemental, modificador de tamanho |
-| `LevelingService` | Curva `Nível * 100`, Level Up Base e Job, Full Heal, distribuição de stat/skill points, caps por `JobClass` |
+| `BattleEngine` | Damage formula `(STR*2 + WeaponATK) - DEF`, loot RNG `nextDouble(0,100) < rate`, elemental modifier, size modifier |
+| `LevelingService` | Curve `Level * 100`, Base and Job Level Up, Full Heal, stat/skill points distribution, caps per `JobClass` |
 
 ### Infrastructure Entities
 
-| Entidade | Detalhe |
+| Entity | Details |
 |---|---|
 | `PlayerEntity` | Flattening: `base_exp`, `job_exp`, `stat_points`, `skill_points`, `map_name`, `active_buffs_json` |
-| `MonsterDropEntity` | `rate` como `DOUBLE PRECISION` em escala 0–100; FK para `monsters` e `items` |
-| `SkillTreeEntity` | Read-only; múltiplas linhas por skill = múltiplos pré-requisitos |
-| `SkillBuffEffectEntity` | `skill_id` + `stat_type` + `value_formula` — avaliada em runtime pelo `ScriptInterpreter` |
-| `WeaponSizeModifierEntity` | `weapon_type` + `monster_size` + `modifier_percent` |
-| `PlayerItemEntity` | UUID PK, permite múltiplas instâncias do mesmo item (ex: duas katanas com refinos diferentes) |
-| `MapMonsterEntity` | `map_id` + `monster_id` + `amount` — sorteio ponderado por `amount` |
+| `MonsterDropEntity` | `rate` as `DOUBLE PRECISION` at 0–100 scale; FK to `monsters` and `items` |
+| `SkillTreeEntity` | Read-only; multiple rows per skill = multiple prerequisites |
+| `SkillBuffEffectEntity` | `skill_id` + `stat_type` + `value_formula` — evaluated at runtime by `ScriptInterpreter` |
+| `WeaponSizeModifierEntity` | `weapon_type` + `small_pct` + `medium_pct` + `large_pct` |
+| `PlayerItemEntity` | UUID PK, allows multiple instances of the same item (e.g., two katanas with different refine levels) |
+| `MapMonsterEntity` | `map_id` + `monster_id` + `amount` — weighted draw by `amount` |
 
 ---
 
-## Cobertura de Testes
+## Test Coverage
 
-**195 testes — 0 falhas — BUILD SUCCESS**
+**240 tests — 0 failures — BUILD SUCCESS**
 
-> Executar com Java 17: `JAVA_HOME=/path/to/jdk-17 ./mvnw test`
-> (Java 21+ quebra o Mockito inline-mock-maker sem configuração adicional de `--add-opens`)
+> Run with Java 17: `JAVA_HOME=/path/to/jdk-17 ./mvnw test`
+> (Java 21+ breaks Mockito inline-mock-maker without additional `--add-opens` configuration)
+>
+> **Integration tests require Docker Desktop running** — Testcontainers starts a PostgreSQL container automatically.
 
 ### Unit Tests
 
-| Classe | Testes | Cobertura |
+| Class | Tests | Coverage |
 |---|---|---|
-| `BattleEngineTest` | 20 | Fórmula de dano, dano mínimo 1, DEF=0, loot 100%/0%/50%, counter-attack, rate escala, null guards |
-| `LevelingServiceTest` | 7 | Curva de XP, Level Up, reset de XP excedente, Full Heal, stat/skill points |
-| `PlayerTest` | 38 | Inventário, getTotalDef, getWeaponAtk, activeBuffs, equipamento |
-| `ActiveBuffTest` | 4 | Construção, expiração, permanente (`durationTurns = -1`) |
-| `MonsterMapperTest` | 9 | Rate 100/70/0.35/0.0/null, item não nulo, invariante ≤100, drops vazios/null |
-| `ScriptInterpreterTest` | 16 | Fórmulas aritméticas, variáveis de stats, casos extremos |
-| `WeaponSizeServiceTest` | 6 | Modificadores por tipo de arma e tamanho de monstro |
-| `ClassChangeServiceTest` | 14 | `listarClassesDisponiveis`, `trocarClasse` com mocks de repositório |
-| `BattleServiceTest` | 10 | Ataque normal, morte (VITÓRIA), counter-attack, morte do jogador (FATAL), null guards |
+| `BattleEngineTest` | 20 | Damage formula, minimum damage 1, DEF=0, 100%/0%/50% loot, counter-attack, rate scale, null guards |
+| `LevelingServiceTest` | 7 | XP curve, Level Up, excess XP reset, Full Heal, stat/skill points |
+| `PlayerTest` | 38 | Inventory, getTotalDef, getWeaponAtk, activeBuffs, equipment |
+| `ActiveBuffTest` | 4 | Construction, expiration, permanent (`durationTurns = -1`) |
+| `MonsterMapperTest` | 9 | Rate 100/70/0.35/0.0/null, non-null item, invariant ≤100, empty/null drops |
+| `ScriptInterpreterTest` | 16 | Arithmetic formulas, stat variables, edge cases |
+| `WeaponSizeServiceTest` | 6 | Modifiers by weapon type and monster size |
+| `ClassChangeServiceTest` | 14 | `listarClassesDisponiveis`, `trocarClasse` with repository mocks |
+| `BattleServiceTest` | 10 | Normal attack, death (VICTORY), counter-attack, player death (FATAL), null guards |
+| `BattleServiceLoggingTest` | 2 | WARN on dead-player attack, INFO on monster kill — Logback `ListAppender` |
+| `BattleEventHandlerTest` | 4 | Loot persistence, XP fields, level-up event publication, player resurrection |
+| `SkillCombatServiceTest` | 9 | Skill not found, not learned, insufficient SP, passive, HEAL, BUFF with duration, BUFF without effects, PHYSICAL_DAMAGE with/without target |
+| `PlayerControllerTest` | — | REST: list, get by id, create player |
+| `BattleControllerTest` | — | REST: attack, dead player 400, player/monster not found 404 |
+| `SkillControllerTest` | — | REST: list skills, learn, use |
+| `ItemControllerTest` | — | REST: list inventory, use item |
+| `MapControllerTest` | — | REST: current map, portals, walk, travel |
+| `GlobalExceptionHandlerTest` | — | HTTP 400 / 404 / 500 mapping for all domain exceptions |
+| `CacheVerificationTest` | 2 | `@SpyBean` verifies `findByWeaponType` called exactly once in two consecutive hits |
+| `ClassChangeLoggingTest` | 2 | Log messages for class change |
+| `ParserLoggingTest` | 4 | Log output from rAthena YAML parsers |
 
-### Integration Tests
+### Integration Tests (Testcontainers — require Docker)
 
-| Classe | Testes | Cobertura |
+| Class | Tests | Coverage |
 |---|---|---|
-| `BattleIntegrationTest` | 2 | Dano físico e counter-attack no banco real |
-| `BattleLootIntegrationTest` | 1 | Drop RNG e persistência em `player_items` |
-| `SkillServiceIntegrationTest` | 10 | Listagem, skills disponíveis, HEAL, BUFF, SP insuficiente, PASSIVE, PHYSICAL_DAMAGE, BUFF sem efeitos |
-| `SkillServiceAprenderTest` | 7 | Incremento de nível, decremento de skillPoints, nível máximo, skill inexistente, jobClass nula |
-| `ClassChangeIntegrationTest` | 2 | `trocarClasse` persiste `jobClass/jobLevel/jobExp`; listagem para NOVICE |
-| `ItemServiceIntegrationTest` | 15 | CRUD de inventário, equip/unequip, auto-swap de slot |
-| `StartupDataLoaderSqlTest` | 9 | `monster_drops.sql` e `map_monsters.sql`: FK safety, idempotência, WHERE EXISTS |
-| `PlayerInventoryIntegrationTest` | 2 | Equip e unequip no banco real |
-| `InventoryDebugTest` | 3 | Integridade do inventário |
-| `MapSpawnIntegrationTest` | 1 | Sorteio ponderado por `amount` |
-| `MonsterDropIntegrationTest` | 1 | Leitura de drops do banco |
-| `RagnarokTerminalRunnerTest` | 11 | Ressurreição automática, flows de exploração |
-| `MonsterCatalogServiceTest` | 1 | ETL completo API → banco |
-| `ItemLoadingTest` | 1 | Carregamento de itens |
+| `BattleIntegrationTest` | 2 | Physical damage and counter-attack on real database |
+| `BattleLootIntegrationTest` | 1 | Drop RNG, inventory persistence, victory message includes drop names |
+| `SkillServiceIntegrationTest` | 10 | Listing, available skills, HEAL, BUFF, insufficient SP, PASSIVE, PHYSICAL_DAMAGE, BUFF without effects |
+| `SkillServiceAprenderTest` | 7 | Level increment, skillPoints decrement, max level, non-existent skill, null jobClass |
+| `ClassChangeIntegrationTest` | 2 | `trocarClasse` persists `jobClass/jobLevel/jobExp`; listing for NOVICE |
+| `ItemServiceIntegrationTest` | 15 | Inventory CRUD, equip/unequip, auto slot-swap |
+| `StartupDataLoaderSqlTest` | 9 | `monster_drops.sql` and `map_monsters.sql`: FK safety, idempotency, WHERE EXISTS |
+| `PlayerInventoryIntegrationTest` | 2 | Equip and unequip on real database |
+| `InventoryDebugTest` | 3 | Inventory integrity |
+| `MapSpawnIntegrationTest` | 1 | MapMonster persistence and retrieval by map ID |
+| `MonsterDropIntegrationTest` | 1 | Drop reading from database |
+| `RagnarokTerminalRunnerTest` | 11 | Auto-resurrection, exploration flows |
+| `MonsterCatalogServiceTest` | 1 | Full ETL API → database |
+| `ItemLoadingTest` | 1 | Item loading |
+| `RagnarokCoreApplicationTests` | 1 | Spring context loads successfully |
 
 ---
 
 ## Roadmap
 
-### Concluído
+### Completed
 
-- **Cadeia de Classes para Skills:** LORD_KNIGHT vê e aprende skills de Knight e Swordsman
-- **Efeitos de Skills:** Buffs com `stat_type` + `value_formula`, passivas permanentes, dano com fórmulas dinâmicas
-- **Modificadores de Tamanho:** `WeaponSizeService` + tabela `weapon_size_modifiers`
-- **Motor de Fórmulas:** `ScriptInterpreter` avalia expressões matemáticas com variáveis de stats em runtime
-- **Mensagens de Efeito:** Usar skill mostra efeitos concretos: `[DEF +2, M_DEF +4]`
-- **Fix Drop Rate:** Escala normalizada para 0–100 na ingestão SQL (`rAthena ÷ 100`)
-- **Menu de Distribuição de Stats:** Terminal permite gastar `statPoints` nos 6 atributos
-- **Sistema de Skills completo:** `skill_tree`/`player_skills`, listagem, pré-requisitos, aprendizado
-- **Troca de Classe:** `ClassChangeService`, progressão NOVICE→Tier1→Tier2, menu via `C`
-- **Startup automático:** `StartupDataLoader` — zero scripts manuais
-- **Limpeza de tela:** `clearScreen()` com ANSI codes entre menus
-- **Inventário empilha corretamente:** Drop de item existente incrementa `amount`
-- **Stat/skill points acumulam em multi-levelup**
-- **LevelingService:** Caps de nível base/job por classe via `JobClass.maxJobLevel()`
+- **Class Chain for Skills:** LORD_KNIGHT sees and learns Knight and Swordsman skills
+- **Skill Effects:** Buffs with `stat_type` + `value_formula`, permanent passives, formula-based damage
+- **Size Modifiers:** `WeaponSizeService` + `weapon_size_modifiers` table
+- **Formula Engine:** `ScriptInterpreter` evaluates mathematical expressions with stat variables at runtime
+- **Effect Messages:** Using a skill shows concrete effects: `[DEF +2, M_DEF +4]`
+- **Fix Drop Rate:** Scale normalized to 0–100 during SQL ingestion (`rAthena ÷ 100`)
+- **Stat Distribution Menu:** Terminal allows spending `statPoints` on 6 attributes
+- **Complete Skills System:** `skill_tree`/`player_skills`, listing, prerequisites, learning
+- **Class Change:** `ClassChangeService`, progression NOVICE→Tier1→Tier2, menu via `C`
+- **Auto Startup:** `StartupDataLoader` — zero manual scripts
+- **Screen Clear:** `clearScreen()` with ANSI codes between menus
+- **Inventory Stacks Correctly:** Dropping an existing item increments `amount`
+- **Stat/skill points accumulate in multi-level-up**
+- **LevelingService:** Base/job level caps per class via `JobClass.maxJobLevel()`
+- **Schema Migration:** Flyway V1 migration, `ddl-auto=validate`
+- **Resilience4j:** `@Retry` (3 attempts, 2 s exponential backoff) + `@CircuitBreaker` on `RathenaDownloadService`; fallback logs WARN and skips import
+- **Testcontainers:** `AbstractIntegrationTest` (Singleton Container Pattern) — all integration tests use an ephemeral `postgres:16` container; no local DB required for `./mvnw test`
+- **Spring Cache (Caffeine):** `@EnableCaching` + `CacheConfig` with 4 named caches; `@Cacheable` / `@CacheEvict` on `WeaponSizeService`, `SkillService`, `SkillTreeRepository`, `SkillBuffEffectRepository`
+- **REST API + Swagger UI:** 5 controllers (Players, Battle, Skills, Inventory, Map), `GlobalExceptionHandler`, springdoc-openapi — full game loop playable at `http://localhost:8080/swagger-ui.html`
+- **Spring Events:** `BattleService` decoupled via `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` owns loot persistence, XP processing, and player resurrection
 
 ### Backlog
 
-#### Alta Prioridade
+#### High Priority
 
-1. **Usar skills em batalha (terminal)** — `usarSkillEmCombate` existe no `SkillService`; integrar ao menu de combate do terminal com seleção de skill e alvo
-2. **Usar itens em batalha** — adicionar opção "Item" no menu de combate para consumíveis do inventário
-3. **Mecânicas dos stats faltantes:**
-   - **AGI** → FLEE (evasão) e ASPD (velocidade de ataque)
-   - **DEX** → HIT (precisão) e redução de cast time
-   - **LUK** → taxa de crítico e bônus de drop rate
-4. **Butterfly Wing / Fly Wing** — teleporte para Prontera / ponto aleatório do mapa
+1. **Use skills in battle (terminal)** — `usarSkillEmCombate` exists in `SkillCombatService`; integrate into combat menu with skill selection and target
+2. **Use items in battle** — add "Item" option to combat menu for consumables in inventory
+3. **Missing stat mechanics:**
+   - **AGI** → FLEE (evasion) and ASPD (attack speed)
+   - **DEX** → HIT (accuracy) and cast time reduction
+   - **LUK** → critical rate and drop rate bonus
+4. **Butterfly Wing / Fly Wing** — teleport to Prontera / random map point
 
-#### Média Prioridade
+#### Medium Priority
 
-5. **Enciclopédia de mapas** — mapas vizinhos, monstros do mapa, drops com raridade
-6. **Sistema de lojas NPC** — compra/venda com Zenny em cidades
-7. **Troca de classe restrita a NPCs** — permitir apenas em locais específicos
+5. **Map encyclopedia** — neighboring maps, map monsters, drops with rarity
+6. **NPC shop system** — buy/sell with Zenny in cities
+7. **Class change restricted to NPCs** — allow only at specific locations
 
-#### Futuro
+#### Future
 
-- **Persistência de posição (X,Y)** — salvar coordenadas ao sair
-- **Conexões de borda entre mapas** — campos conectados geograficamente sem NPC warp
-- **Multiplayer (WebSockets)** — longo prazo
+- **Position persistence (X,Y)** — save coordinates on exit
+- **Edge connections between maps** — geographically connected fields without NPC warp
+- **Multiplayer (WebSockets)** — long term
 
 ---
 
@@ -418,19 +526,44 @@ com.ragnarok
 # Build
 ./mvnw clean install
 
-# Rodar a aplicação
-./mvnw spring-boot:run
+# Run the application (interactive terminal — requires direct JVM stdin)
+java -jar target/ragnarok-core-0.0.1-SNAPSHOT.jar
 
-# Rodar todos os testes (Java 17 recomendado)
+# Run all tests — requires Docker Desktop running (Testcontainers)
 JAVA_HOME=/path/to/jdk-17 ./mvnw test
 
-# Rodar teste específico
+# Run only unit tests (no Docker needed)
+JAVA_HOME=/path/to/jdk-17 ./mvnw test -Djacoco.skip=true \
+  -Dtest="BattleServiceTest,BattleEventHandlerTest,BattleServiceLoggingTest,\
+RagnarokTerminalRunnerTest,GlobalExceptionHandlerTest,PlayerControllerTest,\
+BattleControllerTest,SkillControllerTest,ItemControllerTest,MapControllerTest,\
+WeaponSizeServiceTest,SkillCombatServiceTest,ItemServiceTest,ClassChangeServiceTest,\
+CacheVerificationTest"
+
+# Run a specific test
 ./mvnw test -Dtest=BattleEngineTest
 ```
 
-**Pré-requisitos:**
+**Prerequisites:**
 - Java 17+
-- PostgreSQL rodando em `localhost:5432` com banco `ragnarok_db`
-- Variável de ambiente `DB_PASS` com a senha do PostgreSQL (padrão local: `postgre`)
+- PostgreSQL running on `localhost:5432` with database `ragnarok_db` (for the application)
+- **Docker Desktop** (for `./mvnw test` — Testcontainers starts a `postgres:16` container automatically)
+- Environment variable `DB_PASS` with the PostgreSQL password (local default: `postgre`)
 
-> No primeiro startup, o `RathenaImporter` baixa os dados do rAthena via GitHub (~2675 monstros + todos os itens). O `StartupDataLoader` popula o restante. A aplicação fica pronta em ~30–60 segundos dependendo da conexão.
+> On the first startup, `RathenaImporter` downloads data from rAthena via GitHub (~2675 monsters + all items). `StartupDataLoader` populates the rest. The application is ready in ~30–60 seconds depending on connection speed.
+
+### REST API / Swagger UI
+
+Once the application is running, open **`http://localhost:8080/swagger-ui.html`** to play via browser without cloning the repo.
+
+Recommended flow:
+```
+1. POST /api/players          — {"name":"Hero","jobClass":"NOVICE"}  → note the returned "id"
+2. GET  /api/players/{id}     — verify HP, level, zenny
+3. POST /api/players/{id}/map/walk  → if encounterOccurred=true, note monsterId
+4. POST /api/battle/attack    — {"playerId":1,"monsterId":1002}  → repeat until VITÓRIA
+5. GET  /api/players/{id}/inventory — verify dropped items
+6. GET  /api/players/{id}/skills    — list learnable skills
+7. POST /api/players/{id}/skills/NV_BASIC/learn
+8. POST /api/players/{id}/map/travel — {"destination":"izlude"}
+```

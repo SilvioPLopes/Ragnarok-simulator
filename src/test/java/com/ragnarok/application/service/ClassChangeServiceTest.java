@@ -1,5 +1,8 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.exception.GameException;
+import com.ragnarok.domain.exception.InsufficientJobLevelException;
+import com.ragnarok.domain.exception.InvalidClassProgressionException;
 import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
@@ -147,7 +150,7 @@ class ClassChangeServiceTest {
         PlayerEntity p = makePlayer("NOVICE", 8, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
+        InsufficientJobLevelException ex = assertThrows(InsufficientJobLevelException.class,
                 () -> classChangeService.trocarClasse(1L, JobClass.SWORDSMAN));
         assertTrue(ex.getMessage().contains("9"));
     }
@@ -158,7 +161,7 @@ class ClassChangeServiceTest {
         PlayerEntity p = makePlayer("SWORDSMAN", 39, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
+        InsufficientJobLevelException ex = assertThrows(InsufficientJobLevelException.class,
                 () -> classChangeService.trocarClasse(1L, JobClass.KNIGHT));
         assertTrue(ex.getMessage().contains("40"));
     }
@@ -169,7 +172,7 @@ class ClassChangeServiceTest {
         PlayerEntity p = makePlayer("KNIGHT", 50, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(InvalidClassProgressionException.class,
                 () -> classChangeService.trocarClasse(1L, JobClass.LORD_KNIGHT));
     }
 
@@ -179,7 +182,7 @@ class ClassChangeServiceTest {
         PlayerEntity p = makePlayer("SUPER_NOVICE", 9, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(InvalidClassProgressionException.class,
                 () -> classChangeService.trocarClasse(1L, JobClass.SWORDSMAN));
     }
 
@@ -189,17 +192,17 @@ class ClassChangeServiceTest {
         PlayerEntity p = makePlayer("SUMMONER", 9, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(InvalidClassProgressionException.class,
                 () -> classChangeService.trocarClasse(1L, JobClass.SWORDSMAN));
     }
 
     @Test
-    @DisplayName("Classe inválida para progressão lança exceção")
+    @DisplayName("Classe inválida para progressão lança InvalidClassProgressionException")
     void trocar_classeInvalidaParaProgressao_lancaExcecao() {
         PlayerEntity p = makePlayer("NOVICE", 9, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
+        InvalidClassProgressionException ex = assertThrows(InvalidClassProgressionException.class,
                 () -> classChangeService.trocarClasse(1L, JobClass.KNIGHT));
         assertTrue(ex.getMessage().toLowerCase().contains("inválida") ||
                    ex.getMessage().toLowerCase().contains("invalida"));
@@ -216,13 +219,13 @@ class ClassChangeServiceTest {
     }
 
     @Test
-    @DisplayName("trocarClasse lança exceção quando jobLevel insuficiente (NOVICE jobLevel 5)")
+    @DisplayName("trocarClasse lança InsufficientJobLevelException quando jobLevel insuficiente (NOVICE jobLevel 5)")
     void trocarClasse_jobLevelInsuficiente_lancaExcecao() {
         // Player NOVICE precisa jobLevel >= 9; jobLevel 5 é insuficiente
         PlayerEntity p = makePlayer("NOVICE", 5, 0);
         when(playerRepository.findById(1L)).thenReturn(Optional.of(p));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(InsufficientJobLevelException.class,
                 () -> classChangeService.trocarClasse(1L, JobClass.SWORDSMAN));
     }
 }

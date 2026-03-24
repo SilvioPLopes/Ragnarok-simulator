@@ -33,7 +33,6 @@ public class ItemMapper {
             item.setStats(stats);
         }
 
-        // TODO: Mapear drops quando tivermos a entidade pronta
         item.setDroppedBy(new ArrayList<>());
 
         return item;
