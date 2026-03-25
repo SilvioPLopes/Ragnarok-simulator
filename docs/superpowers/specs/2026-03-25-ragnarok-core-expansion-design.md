@@ -87,6 +87,10 @@ infrastructure/security/
   JwtUtil.java              — generateToken(accountId), extractAccountId(token), isValid(token)
   JwtFilter.java            — OncePerRequestFilter; bypass em /api/accounts/**
 
+api/
+  GlobalExceptionHandler.java  — @RestControllerAdvice; adiciona handler: IllegalStateException -> 409
+                                  (O GlobalExceptionHandler ja existe no projeto da Feature 4;
+                                   A1 apenas adiciona o handler de IllegalStateException -> 409)
 api/controller/
   AccountController.java    — POST /api/accounts/register, POST /api/accounts/login
 api/dto/request/
@@ -99,6 +103,7 @@ api/dto/response/
 ### Dependências novas no pom.xml
 
 ```xml
+<!-- JWT -->
 <dependency>
     <groupId>io.jsonwebtoken</groupId>
     <artifactId>jjwt-api</artifactId>
@@ -116,7 +121,14 @@ api/dto/response/
     <version>0.12.6</version>
     <scope>runtime</scope>
 </dependency>
+<!-- BCrypt (sem Spring Security completo) -->
+<dependency>
+    <groupId>org.springframework.security</groupId>
+    <artifactId>spring-security-crypto</artifactId>
+</dependency>
 ```
+
+> `spring-security-crypto` fornece `BCryptPasswordEncoder` sem puxar o módulo de autenticacao/filtros do Spring Security. A versao e gerenciada pelo Spring Boot BOM.
 
 ### Endpoints
 
@@ -129,11 +141,14 @@ POST /api/accounts/login      — { username, password }          -> 200 { token
 
 ```
 AccountService.register(username, password, email)
-  1. valida username unico (lanca IllegalArgumentException se duplicado -> 404)
-  2. BCrypt na senha
+  1. valida username unico — se duplicado: lanca IllegalStateException("Username ja existe")
+     GlobalExceptionHandler mapeia IllegalStateException -> 409 Conflict
+  2. BCrypt na senha (BCryptPasswordEncoder de spring-security-crypto)
   3. salva AccountEntity
   4. fraudClient.syncRegistrationAsync(accountId, false, false, null)
 ```
+
+> **Nota:** username duplicado retorna **409 Conflict**, nao 404. Requer adicionar handler em `GlobalExceptionHandler` para `IllegalStateException -> 409`.
 
 ### Fluxo de login
 
@@ -343,6 +358,15 @@ CashShopService.buy(accountId, playerId, itemId)
 - `CashShopServiceTest` — compra com sucesso, cashPoints insuficiente, item inativo, bloqueado pelo fraud
 - `NpcShopControllerTest`, `CashShopControllerTest` — status codes
 
+### Ownership de AccountEntity entre A1 e A3
+
+**Agente A1 e somente A1 cria e e dono de `AccountEntity.java` e `AccountRepository.java`.**
+
+Agente A3 NAO cria nenhuma versao de `AccountEntity`. Em vez disso:
+- `CashShopService` recebe `accountId` (Long) como parametro e injeta `AccountRepository`
+- `AccountRepository` e declarado como dependencia externa no Javadoc: `// REQUER: AccountRepository criado pelo Agente A1`
+- Na integracao apos Onda 1, A3 injeta o `AccountRepository` ja existente sem conflito de arquivo
+
 ---
 
 ## Sistema 4 — Mercado entre jogadores (Agente B1)
@@ -465,6 +489,11 @@ public class FilterConfig {
 
 ### Controllers a modificar
 
+> Os controllers `PlayerController`, `BattleController`, `SkillController`, `ItemController` e `MapController`
+> foram criados na Feature 4 (REST API) e ja existem no projeto. B2 os modifica para adicionar ownership validation.
+> Os controllers `TradeController`, `NpcShopController`, `CashShopController` e `MarketController` sao criados
+> em Onda 1/2 e ja nascem com ownership validation.
+
 Padrao adotado em todos os controllers que recebem `playerId`:
 
 ```java
@@ -472,17 +501,17 @@ Long accountId = (Long) request.getAttribute("accountId");
 accountService.validateOwnership(accountId, playerId);
 ```
 
-| Controller | Endpoints afetados |
-|---|---|
-| `PlayerController` | todos |
-| `BattleController` | `POST /api/battle/attack` |
-| `SkillController` | todos |
-| `ItemController` | todos |
-| `MapController` | todos |
-| `TradeController` | todos (A2) |
-| `NpcShopController` | todos (A3) |
-| `CashShopController` | todos (A3) — usa accountId do token, nao playerId |
-| `MarketController` | todos (B1) |
+| Controller | Status | Endpoints afetados |
+|---|---|---|
+| `PlayerController` | ja existe (Feature 4) — B2 modifica | todos |
+| `BattleController` | ja existe (Feature 4) — B2 modifica | `POST /api/battle/attack` |
+| `SkillController` | ja existe (Feature 4) — B2 modifica | todos |
+| `ItemController` | ja existe (Feature 4) — B2 modifica | todos |
+| `MapController` | ja existe (Feature 4) — B2 modifica | todos |
+| `TradeController` | criado por A2 — ja nasce protegido | todos |
+| `NpcShopController` | criado por A3 — ja nasce protegido | todos |
+| `CashShopController` | criado por A3 — usa accountId do token, nao playerId | todos |
+| `MarketController` | criado por B1 — ja nasce protegido | todos |
 
 ### Testes obrigatorios
 
