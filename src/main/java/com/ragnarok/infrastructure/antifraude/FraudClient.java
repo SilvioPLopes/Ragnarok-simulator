@@ -55,4 +55,30 @@ public class FraudClient {
                                       boolean ageVerified, String referralCode) {
         // no-op stub — would publish to a message queue in production
     }
+
+    /**
+     * Checks whether an item trade between players should be allowed.
+     *
+     * @param senderPlayerId  the player sending/selling the item
+     * @param itemId          the item's catalog id
+     * @param playerItemUuid  the specific PlayerItem UUID as string
+     * @param requestedZenny  the zenny amount requested in exchange
+     */
+    public FraudDecision checkItemTrade(Long senderPlayerId, Long itemId,
+                                        String playerItemUuid, Long requestedZenny) {
+        return FraudDecision.FALLBACK_APPROVED;
+    }
+
+    /**
+     * Checks whether a market purchase should be allowed.
+     *
+     * @param buyerPlayerId      the player making the purchase
+     * @param itemId             the item's catalog id
+     * @param quantity           quantity being purchased
+     * @param totalActiveListings total active listings for this item (market activity signal)
+     */
+    public FraudDecision checkMarketPurchase(Long buyerPlayerId, Long itemId,
+                                             Long quantity, Long totalActiveListings) {
+        return FraudDecision.FALLBACK_APPROVED;
+    }
 }
