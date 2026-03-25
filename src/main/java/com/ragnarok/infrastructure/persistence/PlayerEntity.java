@@ -73,6 +73,9 @@ public class PlayerEntity {
     @Column(name = "active_buffs", columnDefinition = "TEXT")
     private String activeBuffsJson;
 
+    @Column(name = "account_id")
+    private Long accountId;
+
     // --- Relacionamento com Inventário ---
 
     @OneToMany(mappedBy = "player", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
