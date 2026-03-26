@@ -1,30 +1,27 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.AbstractIntegrationTest;
+import com.ragnarok.application.dto.SkillRowDTO;
+import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.persistence.*;
-import com.ragnarok.runner.RagnarokTerminalRunner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.cache.CacheManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@ActiveProfiles("test")
-@SpringBootTest
-class SkillServiceIntegrationTest {
-
-    @MockBean
-    @SuppressWarnings("unused")
-    private RagnarokTerminalRunner ragnarokTerminalRunner;
+class SkillServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private SkillService skillService;
+
+    @Autowired
+    private SkillCombatService skillCombatService;
 
     @Autowired
     private PlayerRepository playerRepository;
@@ -41,10 +38,16 @@ class SkillServiceIntegrationTest {
     @Autowired
     private MonsterRepository monsterRepository;
 
+    @Autowired
+    private CacheManager cacheManager;
+
     private static final Long PLAYER_ID = 1L;
 
     @BeforeEach
     void limparSkillsDoPlayer() {
+        var cache = cacheManager.getCache("playerSkills");
+        if (cache != null) cache.evict(PLAYER_ID);
+
         playerSkillRepository.findByPlayerId(PLAYER_ID)
                 .forEach(s -> playerSkillRepository.delete(s));
     }
@@ -80,8 +83,8 @@ class SkillServiceIntegrationTest {
     @DisplayName("usarSkillEmCombate lança exceção quando skill não aprendida")
     void usarSkill_naoAprendida_lancaExcecao() {
         // player_skills está vazio (limpo no @BeforeEach) — NV_BASIC não foi aprendida
-        assertThrows(IllegalStateException.class,
-                () -> skillService.usarSkillEmCombate(PLAYER_ID, "NV_BASIC", null));
+        assertThrows(GameException.class,
+                () -> skillCombatService.usarSkillEmCombate(PLAYER_ID, "NV_BASIC", null));
     }
 
     @Test
@@ -121,7 +124,7 @@ class SkillServiceIntegrationTest {
         player.setHpMax(100);
         playerRepository.save(player);
 
-        String result = skillService.usarSkillEmCombate(PLAYER_ID, "TEST_HEAL_99", null);
+        String result = skillCombatService.usarSkillEmCombate(PLAYER_ID, "TEST_HEAL_99", null);
 
         assertTrue(result.contains("50"), "Deve reportar 50 de HP curado");
         var atualizado = playerRepository.findById(PLAYER_ID).orElseThrow();
@@ -160,7 +163,7 @@ class SkillServiceIntegrationTest {
         player.setSpMax(100);
         playerRepository.save(player);
 
-        String result = skillService.usarSkillEmCombate(PLAYER_ID, "TEST_BUFF_99", null);
+        String result = skillCombatService.usarSkillEmCombate(PLAYER_ID, "TEST_BUFF_99", null);
 
         assertTrue(result.contains("5 turnos"), "Deve mencionar a duração de 5 turnos");
     }
@@ -189,8 +192,8 @@ class SkillServiceIntegrationTest {
         player.setSpCurrent(5);
         playerRepository.save(player);
 
-        assertThrows(IllegalStateException.class,
-                () -> skillService.usarSkillEmCombate(PLAYER_ID, "TEST_SPCHECK_99", null),
+        assertThrows(GameException.class,
+                () -> skillCombatService.usarSkillEmCombate(PLAYER_ID, "TEST_SPCHECK_99", null),
                 "Deve lançar exceção por SP insuficiente");
     }
 
@@ -216,8 +219,8 @@ class SkillServiceIntegrationTest {
         player.setSpCurrent(50);
         playerRepository.save(player);
 
-        assertThrows(IllegalStateException.class,
-                () -> skillService.usarSkillEmCombate(PLAYER_ID, "TEST_PASSIVE_99", null),
+        assertThrows(GameException.class,
+                () -> skillCombatService.usarSkillEmCombate(PLAYER_ID, "TEST_PASSIVE_99", null),
                 "Deve lançar exceção pois skill passiva não pode ser usada manualmente");
     }
 
@@ -255,7 +258,7 @@ class SkillServiceIntegrationTest {
         player.setSpMax(100);
         playerRepository.save(player);
 
-        String result = skillService.usarSkillEmCombate(PLAYER_ID, "TEST_PHYS_99", 99991L);
+        String result = skillCombatService.usarSkillEmCombate(PLAYER_ID, "TEST_PHYS_99", 99991L);
 
         assertTrue(result.contains("causou"), "Deve reportar dano causado");
         assertTrue(result.contains("HP do monstro"), "Deve mencionar HP do monstro");
@@ -285,8 +288,8 @@ class SkillServiceIntegrationTest {
         player.setSpCurrent(50);
         playerRepository.save(player);
 
-        assertThrows(IllegalStateException.class,
-                () -> skillService.usarSkillEmCombate(PLAYER_ID, "TEST_BUFF_EMPTY_99", null),
+        assertThrows(GameException.class,
+                () -> skillCombatService.usarSkillEmCombate(PLAYER_ID, "TEST_BUFF_EMPTY_99", null),
                 "Deve lançar exceção quando BUFF não tem efeitos configurados");
     }
 }

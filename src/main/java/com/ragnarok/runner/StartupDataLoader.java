@@ -1,5 +1,7 @@
 package com.ragnarok.runner;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
@@ -21,6 +23,8 @@ import java.util.Arrays;
 @Component
 @Order(3)
 public class StartupDataLoader implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(StartupDataLoader.class);
 
     private final JdbcTemplate jdbc;
     private final DataSource dataSource;
@@ -80,10 +84,10 @@ public class StartupDataLoader implements CommandLineRunner {
                 "DELETE FROM " + tabela + " WHERE ctid NOT IN (" +
                 "  SELECT min(ctid) FROM " + tabela + " GROUP BY " + colunas + ")");
             if (removidas > 0) {
-                System.out.printf("🧹 Removidas %d duplicatas de %s (%s)%n", removidas, tabela, colunas);
+                log.info("Removed {} duplicate rows from {} ({}).", removidas, tabela, colunas);
             }
         } catch (Exception e) {
-            System.err.printf("⚠️ Erro ao deduplicar %s: %s%n", tabela, e.getMessage());
+            log.warn("Error deduplicating {}: {}", tabela, e.getMessage());
         }
     }
 
@@ -93,7 +97,7 @@ public class StartupDataLoader implements CommandLineRunner {
                 Boolean.class, constraintName);
         if (Boolean.FALSE.equals(exists)) {
             jdbc.execute(alterSql);
-            System.out.println("✅ Constraint criada: " + constraintName);
+            log.info("Constraint created: {}", constraintName);
         }
     }
 
@@ -102,29 +106,29 @@ public class StartupDataLoader implements CommandLineRunner {
      * Usado para tabelas com ON CONFLICT DO UPDATE — idempotente por design.
      */
     private void forceLoad(String sqlFile) {
-        System.out.printf("🔄 Atualizando via force-load: %s...%n", sqlFile);
+        log.info("Force-loading: {}...", sqlFile);
         try (Connection conn = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(conn, new ClassPathResource(sqlFile));
-            System.out.printf("✅ %-20s atualizada (force).%n", sqlFile);
+            log.info("Force-loaded: {}.", sqlFile);
         } catch (Exception e) {
-            System.err.printf("❌ Erro ao carregar %s: %s%n", sqlFile, e.getMessage());
+            log.warn("Error loading {}: {}", sqlFile, e.getMessage());
         }
     }
 
     private void loadIfEmpty(String tableName, String sqlFile, long threshold) {
         long count = jdbc.queryForObject("SELECT COUNT(*) FROM " + tableName, Long.class);
         if (count > threshold) {
-            System.out.printf("📦 %-15s já populada (%d registros). Pulando.%n", tableName, count);
+            log.info("Table '{}' already populated ({} rows). Skipping.", tableName, count);
             return;
         }
 
-        System.out.printf("🔄 Populando %-15s a partir de %s...%n", tableName, sqlFile);
+        log.info("Populating '{}' from {}...", tableName, sqlFile);
         try (Connection conn = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(conn, new ClassPathResource(sqlFile));
             long after = jdbc.queryForObject("SELECT COUNT(*) FROM " + tableName, Long.class);
-            System.out.printf("✅ %-15s populada com %d registros.%n", tableName, after);
+            log.info("Table '{}' populated with {} rows.", tableName, after);
         } catch (Exception e) {
-            System.err.printf("❌ Erro ao popular %s: %s%n", tableName, e.getMessage());
+            log.warn("Error populating {}: {}", tableName, e.getMessage());
         }
     }
 }

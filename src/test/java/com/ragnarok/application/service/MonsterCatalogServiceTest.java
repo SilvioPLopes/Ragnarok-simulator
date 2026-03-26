@@ -4,7 +4,6 @@ import com.ragnarok.infrastructure.client.RagnapiClient;
 import com.ragnarok.infrastructure.client.dto.MonsterDTO;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.runner.RagnarokTerminalRunner;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,28 +42,13 @@ class MonsterCatalogServiceTest {
     private ItemRepository itemRepository;
 
     @Autowired
-    private GameMapRepository gameMapRepository;
-
-    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private static final Long MONSTER_ID = 1001L;
     private static final Long ITEM_ID = 990L;
-    private static final String MAP_ID = "moc_fild08";
 
     @BeforeEach
     void limparDadosDeTeste() {
-        // Respeita a ordem das FKs: dependentes antes do pai
-        jdbcTemplate.update("DELETE FROM monster_spawns WHERE monster_id = ?", MONSTER_ID);
-        jdbcTemplate.update("DELETE FROM map_monsters WHERE monster_id = ?", MONSTER_ID);
-        jdbcTemplate.update("DELETE FROM monster_drops WHERE monster_id = ?", MONSTER_ID);
-        jdbcTemplate.update("DELETE FROM monsters WHERE id = ?", MONSTER_ID);
-    }
-
-    @AfterEach
-    void removerDadosCriados() {
-        jdbcTemplate.update("DELETE FROM monster_spawns WHERE monster_id = ?", MONSTER_ID);
-        jdbcTemplate.update("DELETE FROM map_monsters WHERE monster_id = ?", MONSTER_ID);
         jdbcTemplate.update("DELETE FROM monster_drops WHERE monster_id = ?", MONSTER_ID);
         jdbcTemplate.update("DELETE FROM monsters WHERE id = ?", MONSTER_ID);
     }
@@ -96,14 +80,12 @@ class MonsterCatalogServiceTest {
                 15  // dex
         );
 
-        // Drop: Red Blood (item ID 990 codificado na URL da imagem)
         MonsterDTO.DropDTO dropRedBlood = new MonsterDTO.DropDTO(
                 "red_blood",
                 "http://db.irowiki.org/image/item/990.png",
                 100.0
         );
 
-        // Mapa: moc_fild08 codificado na URL da imagem
         MonsterDTO.MapDTO mapaDeserto = new MonsterDTO.MapDTO(
                 "Morroc Field 08",
                 1,
@@ -132,37 +114,17 @@ class MonsterCatalogServiceTest {
     }
 
     @Test
-    @DisplayName("Deve processar Escorpião mockado, salvar Drops e criar Mapas de Spawn (moc_fild08)")
-    void deveCarregarESalvarMonstroComDropsEMapas() {
-        // 1. Configura o mock: substitui a chamada HTTP por dados fixos
+    @DisplayName("Should process mocked monster, save it, and create drop placeholders")
+    void deveCarregarESalvarMonstroComDrops() {
         when(ragnapiClient.getMonsterById(MONSTER_ID)).thenReturn(montarDtoEscorpiao());
 
-        // 2. Executa a lógica de negócio (sem HTTP real)
         monsterCatalogService.carregarESalvarMonstro(MONSTER_ID);
 
-        // 3. Valida que o Monstro foi persistido
         Optional<MonsterEntity> monstro = monsterRepository.findById(MONSTER_ID);
-        assertTrue(monstro.isPresent(), "O Escorpião (ID=1001) deveria ter sido salvo no banco");
+        assertTrue(monstro.isPresent(), "Scorpion (ID=1001) should have been saved to the database");
         assertEquals("Scorpion", monstro.get().getName());
 
-        // 4. Valida Drops: o serviço deve ter criado/encontrado o Item Red Blood (ID=990)
         assertTrue(itemRepository.existsById(ITEM_ID),
-                "O item Red Blood (ID=990) deve existir após processar os drops");
-
-        // 5. Valida Mapas: o serviço deve ter criado/encontrado o mapa moc_fild08
-        boolean mapaExiste = gameMapRepository.existsById(MAP_ID);
-        assertTrue(mapaExiste, "O mapa moc_fild08 deveria ter sido criado automaticamente");
-
-        // 6. Valida Spawns: o monstro deve ter vínculo com o mapa
-        MonsterEntity monstroComSpawns = monsterRepository.findById(MONSTER_ID).orElseThrow();
-        assertFalse(monstroComSpawns.getSpawns().isEmpty(),
-                "A lista de spawns não pode estar vazia");
-
-        boolean temSpawnNoDeserto = monstroComSpawns.getSpawns().stream()
-                .anyMatch(spawn -> MAP_ID.equals(spawn.getMap().getId()));
-        assertTrue(temSpawnNoDeserto,
-                "Deveria ter criado o vínculo de spawn no mapa moc_fild08");
-
-        System.out.println("SUCESSO! Monstro, Drop (Red Blood) e Mapa (moc_fild08) validados sem API externa.");
+                "Item Red Blood (ID=990) should exist after processing drops");
     }
 }

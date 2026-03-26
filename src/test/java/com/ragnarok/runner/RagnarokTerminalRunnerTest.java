@@ -36,6 +36,7 @@ class RagnarokTerminalRunnerTest {
     @Mock private PlayerMapper playerMapper;
     @Mock private MapPortalRepository portalRepo;
     @Mock private SkillService skillService;
+    @Mock private SkillCombatService skillCombatService;
     @Mock private ClassChangeService classChangeService;
 
     @InjectMocks
@@ -68,7 +69,7 @@ class RagnarokTerminalRunnerTest {
     // ── Teste original: Ressuscitar após FATAL ────────────────────────────────
 
     @Test
-    @DisplayName("Runner: Deve ressuscitar jogador automaticamente ao receber FATAL do serviço")
+    @DisplayName("Runner: Deve resetar estado de batalha ao receber FATAL do serviço")
     void deveRessuscitarJogadorAposMorte() {
         System.setIn(new ByteArrayInputStream("1\n".getBytes()));
         ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
@@ -79,9 +80,10 @@ class RagnarokTerminalRunnerTest {
 
         ReflectionTestUtils.invokeMethod(runner, "renderBattleMenu");
 
-        verify(playerService).ressuscitarJogador(1L);
         boolean inBattle = (boolean) ReflectionTestUtils.getField(runner, "inBattle");
         assertFalse(inBattle);
+        assertNull(ReflectionTestUtils.getField(runner, "currentMonster"),
+                "currentMonster deve ser null após morte");
     }
 
     // ── moverParaMapa: troca mapName e salva player ───────────────────────────
@@ -98,13 +100,11 @@ class RagnarokTerminalRunnerTest {
         verify(playerRepo).save(playerMock);
     }
 
-    // ── handlePlayerDeath: inBattle=false, ressuscitar, mapa=prontera ─────────
+    // ── handlePlayerDeath: inBattle=false, currentMonster=null ───────────────
 
     @Test
-    @DisplayName("handlePlayerDeath: reseta inBattle, chama ressuscitar e move para prontera")
+    @DisplayName("handlePlayerDeath: reseta inBattle e currentMonster (ressurreição delegada ao BattleEventHandler)")
     void handlePlayerDeath_resetaBattleEMoveParaProntera() {
-        when(playerRepo.findById(1L)).thenReturn(Optional.of(playerMock));
-
         ReflectionTestUtils.invokeMethod(runner, "handlePlayerDeath");
 
         boolean inBattle = (boolean) ReflectionTestUtils.getField(runner, "inBattle");
@@ -112,11 +112,6 @@ class RagnarokTerminalRunnerTest {
 
         assertNull(ReflectionTestUtils.getField(runner, "currentMonster"),
                 "currentMonster deve ser null após morte");
-
-        verify(playerService).ressuscitarJogador(1L);
-        assertEquals("prontera", playerMock.getMapName(),
-                "mapName deve ser prontera após morte");
-        verify(playerRepo).save(playerMock);
     }
 
     // ── caminhar: branch 70% — encontro com monstro ──────────────────────────
@@ -180,5 +175,105 @@ class RagnarokTerminalRunnerTest {
 
         boolean inBattle = (boolean) ReflectionTestUtils.getField(runner, "inBattle");
         assertFalse(inBattle, "inBattle deve permanecer false se mapa não tem monstros");
+    }
+
+    // ── renderCharacterSelect ─────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("renderCharacterSelect: sem players no banco retorna false sem entrar no jogo")
+    void renderCharacterSelect_semPlayers_retornaFalse() {
+        when(playerRepo.findAll()).thenReturn(List.of());
+
+        boolean resultado = (boolean) ReflectionTestUtils.invokeMethod(runner, "renderCharacterSelect");
+
+        assertFalse(resultado, "deve retornar false quando não há personagens cadastrados");
+    }
+
+    @Test
+    @DisplayName("renderCharacterSelect: opção 0 (Sair) retorna false")
+    void renderCharacterSelect_opcaoZero_retornaFalse() {
+        PlayerEntity p = buildPlayer(1L, "Hero", "Novice", 10, 129, 500, "prontera");
+        when(playerRepo.findAll()).thenReturn(List.of(p));
+
+        System.setIn(new ByteArrayInputStream("0\n".getBytes()));
+        ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
+
+        boolean resultado = (boolean) ReflectionTestUtils.invokeMethod(runner, "renderCharacterSelect");
+
+        assertFalse(resultado, "opção 0 deve encerrar sem selecionar personagem");
+    }
+
+    @Test
+    @DisplayName("renderCharacterSelect: selecionar player válido seta currentPlayer e retorna true")
+    void renderCharacterSelect_playerValido_setaCurrentPlayerERetornaTrue() {
+        PlayerEntity p = buildPlayer(7L, "Mirela", "Mage", 25, 180, 180, "geffen");
+        when(playerRepo.findAll()).thenReturn(List.of(p));
+
+        System.setIn(new ByteArrayInputStream("1\n".getBytes()));
+        ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
+
+        boolean resultado = (boolean) ReflectionTestUtils.invokeMethod(runner, "renderCharacterSelect");
+
+        assertTrue(resultado, "deve retornar true ao selecionar um personagem válido");
+        Player current = (Player) ReflectionTestUtils.getField(runner, "currentPlayer");
+        assertNotNull(current, "currentPlayer não pode ser null após seleção");
+        assertEquals(7L, current.getId(), "currentPlayer deve ter o ID do personagem escolhido");
+    }
+
+    @Test
+    @DisplayName("renderCharacterSelect: selecionar entre múltiplos players seta o ID correto")
+    void renderCharacterSelect_multiplosPlayers_setaIdCorreto() {
+        PlayerEntity p1 = buildPlayer(1L, "Hero",   "Novice",    10, 129, 500, "prontera");
+        PlayerEntity p2 = buildPlayer(2L, "Aldric", "Swordsman", 15, 250, 250, "prontera");
+        PlayerEntity p3 = buildPlayer(3L, "Mirela", "Mage",      25, 180, 180, "geffen");
+        when(playerRepo.findAll()).thenReturn(List.of(p1, p2, p3));
+
+        System.setIn(new ByteArrayInputStream("2\n".getBytes()));
+        ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
+
+        ReflectionTestUtils.invokeMethod(runner, "renderCharacterSelect");
+
+        Player current = (Player) ReflectionTestUtils.getField(runner, "currentPlayer");
+        assertEquals(2L, current.getId(), "deve selecionar o segundo personagem da lista");
+    }
+
+    // ── renderExplorationMenu — opção 6 (Trocar personagem) ──────────────────
+
+    @Test
+    @DisplayName("renderExplorationMenu: opção 6 reseta estado de batalha e sinaliza troca de personagem")
+    void renderExplorationMenu_opcao6_resetaBatalhaESetaTrocarPersonagem() {
+        PlayerEntity p = buildPlayer(1L, "Hero", "Novice", 10, 129, 500, "prontera");
+        when(playerRepo.findById(1L)).thenReturn(Optional.of(p));
+
+        ReflectionTestUtils.setField(runner, "inBattle", true);
+        ReflectionTestUtils.setField(runner, "currentMonster", monsterMock);
+        ReflectionTestUtils.setField(runner, "trocarPersonagem", false);
+
+        System.setIn(new ByteArrayInputStream("6\n".getBytes()));
+        ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
+
+        ReflectionTestUtils.invokeMethod(runner, "renderExplorationMenu");
+
+        assertTrue((boolean) ReflectionTestUtils.getField(runner, "trocarPersonagem"),
+                "trocarPersonagem deve ser true para sinalizar saída do gameLoop");
+        assertFalse((boolean) ReflectionTestUtils.getField(runner, "inBattle"),
+                "inBattle deve ser resetado para false ao trocar personagem");
+        assertNull(ReflectionTestUtils.getField(runner, "currentMonster"),
+                "currentMonster deve ser null ao trocar personagem");
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    private PlayerEntity buildPlayer(Long id, String name, String jobClass,
+                                     int baseLevel, int hp, int hpMax, String mapa) {
+        PlayerEntity p = new PlayerEntity();
+        p.setId(id);
+        p.setName(name);
+        p.setJobClass(jobClass);
+        p.setBaseLevel(baseLevel);
+        p.setHpCurrent(hp);
+        p.setHpMax(hpMax);
+        p.setMapName(mapa);
+        return p;
     }
 }

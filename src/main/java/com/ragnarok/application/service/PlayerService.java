@@ -4,6 +4,7 @@ import com.ragnarok.domain.model.Player;
 import com.ragnarok.domain.model.PlayerLocation;
 import com.ragnarok.domain.model.PlayerStats;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
@@ -62,5 +63,14 @@ public class PlayerService {
         entity.setHpCurrent(maxHp);
         // O Hibernate fará o update automático ao fechar a transação, mas o save reforça.
         playerRepository.save(entity);
+    }
+
+    public List<PlayerEntity> listarPersonagens() {
+        return playerRepository.findAll();
+    }
+
+    public PlayerEntity buscarPersonagem(Long id) {
+        return playerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Player not found: " + id));
     }
 }

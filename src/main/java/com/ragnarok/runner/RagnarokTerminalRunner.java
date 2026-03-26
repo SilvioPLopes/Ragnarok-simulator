@@ -4,8 +4,10 @@ import com.ragnarok.application.service.BattleService;
 import com.ragnarok.application.service.ClassChangeService;
 import com.ragnarok.application.service.ItemService;
 import com.ragnarok.application.service.PlayerService;
-import com.ragnarok.application.service.SkillRowDTO;
+import com.ragnarok.application.service.SkillCombatService;
+import com.ragnarok.application.dto.SkillRowDTO;
 import com.ragnarok.application.service.SkillService;
+import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.domain.model.JobClass;
 import com.ragnarok.domain.model.Player;
@@ -26,11 +28,12 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     private final ItemService itemService;
     private final PlayerRepository playerRepo;
     private final PlayerItemRepository playerItemRepo;
-    private final MapMonsterRepository mapMonsterRepo;   // NOVO: substitui MonsterSpawnRepository
+    private final MapMonsterRepository mapMonsterRepo;
     private final MonsterRepository monsterRepo;
     private final PlayerMapper playerMapper;
     private final MapPortalRepository portalRepo;
     private final SkillService skillService;
+    private final SkillCombatService skillCombatService;
     private final ClassChangeService classChangeService;
 
     private final Scanner scanner = new Scanner(System.in);
@@ -39,12 +42,14 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     private Player currentPlayer;
     private MonsterEntity currentMonster;
     private boolean inBattle = false;
+    private boolean trocarPersonagem = false;
 
     public RagnarokTerminalRunner(BattleService bs, PlayerService ps, ItemService is,
                                   PlayerRepository pr, PlayerItemRepository pir,
                                   MapMonsterRepository mmr, MonsterRepository mr,
                                   PlayerMapper pm, MapPortalRepository portalRepo,
-                                  SkillService skillService, ClassChangeService classChangeService) {
+                                  SkillService skillService, SkillCombatService skillCombatService,
+                                  ClassChangeService classChangeService) {
         this.battleService      = bs;
         this.playerService      = ps;
         this.itemService        = is;
@@ -55,19 +60,18 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         this.playerMapper       = pm;
         this.portalRepo         = portalRepo;
         this.skillService       = skillService;
+        this.skillCombatService = skillCombatService;
         this.classChangeService = classChangeService;
     }
 
     @Override
     public void run(String... args) throws Exception {
         System.out.println(">>> INICIANDO RAGNAROK TERMINAL...");
-        if (!playerRepo.existsById(1L)) {
-            System.out.println("Player ID 1 nao encontrado.");
-            return;
+        while (true) {
+            if (!renderCharacterSelect()) return;
+            trocarPersonagem = false;
+            gameLoop();
         }
-        currentPlayer = new Player();
-        currentPlayer.setId(1L);
-        gameLoop();
     }
 
     private void clearScreen() {
@@ -75,8 +79,52 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         System.out.flush();
     }
 
-    private void gameLoop() {
+    private boolean renderCharacterSelect() {
         while (true) {
+            clearScreen();
+            List<PlayerEntity> players = playerRepo.findAll();
+
+            if (players.isEmpty()) {
+                System.out.println("Nenhum personagem cadastrado. Crie um personagem para jogar.");
+                return false;
+            }
+
+            System.out.println("\n=== SELECIONE SEU PERSONAGEM ===");
+            for (int i = 0; i < players.size(); i++) {
+                PlayerEntity p = players.get(i);
+                String classe = p.getJobClass() != null ? p.getJobClass() : "Novice";
+                int level    = p.getBaseLevel()  != null ? p.getBaseLevel()  : 1;
+                int hp       = p.getHpCurrent()  != null ? p.getHpCurrent()  : 0;
+                int hpMax    = p.getHpMax()       != null ? p.getHpMax()      : 0;
+                String mapa  = p.getMapName()     != null ? p.getMapName()    : "prontera";
+                System.out.printf("%d. %-12s | %-10s | Base %-3d | HP %d/%d | %s%n",
+                        (i + 1), p.getName(), classe, level, hp, hpMax, mapa);
+            }
+            System.out.println("0. Sair");
+            System.out.print("> ");
+
+            int escolha;
+            try {
+                escolha = Integer.parseInt(scanner.nextLine().trim());
+            } catch (NumberFormatException e) {
+                System.out.println("Digite apenas numeros.");
+                continue;
+            }
+
+            if (escolha == 0) return false;
+            if (escolha < 1 || escolha > players.size()) {
+                System.out.println("Opcao invalida.");
+                continue;
+            }
+
+            currentPlayer = new Player();
+            currentPlayer.setId(players.get(escolha - 1).getId());
+            return true;
+        }
+    }
+
+    private void gameLoop() {
+        while (!trocarPersonagem) {
             try {
                 if (inBattle) renderBattleMenu();
                 else renderExplorationMenu();
@@ -90,7 +138,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
     private void renderExplorationMenu() {
         clearScreen();
-        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow(() -> new GameException("Player not found: " + currentPlayer.getId()));
         String mapaAtual = p.getMapName() != null ? p.getMapName() : "prontera";
 
         System.out.println("\n[MAPA: " + mapaAtual + "] (HP: " + p.getHpCurrent() + "/" + p.getHpMax() + ")");
@@ -99,7 +147,8 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         System.out.println("3. Inventario");
         System.out.println("4. Ver Status");
         System.out.println("5. Usar Skill");
-        System.out.println("6. Sair");
+        System.out.println("6. Trocar personagem");
+        System.out.println("7. Sair");
         System.out.print("> ");
 
         String input = scanner.nextLine();
@@ -108,7 +157,11 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         else if ("3".equals(input)) renderInventoryMenu();
         else if ("4".equals(input)) renderStatusMenu();
         else if ("5".equals(input)) renderOutOfBattleSkillMenu();
-        else if ("6".equals(input)) System.exit(0);
+        else if ("6".equals(input)) {
+            inBattle = false;
+            currentMonster = null;
+            trocarPersonagem = true;
+        } else if ("7".equals(input)) System.exit(0);
     }
 
     private void renderPortaisMenu(String mapaAtual) {
@@ -144,7 +197,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     }
 
     private void moverParaMapa(String destino) {
-        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow(() -> new GameException("Player not found: " + currentPlayer.getId()));
         p.setMapName(destino);
         playerRepo.save(p);
         System.out.println(">>> Voce viajou para: " + destino);
@@ -153,7 +206,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     private void renderStatusMenu() {
         while (true) {
             clearScreen();
-            PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+            PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow(() -> new GameException("Player not found: " + currentPlayer.getId()));
             Player domainPlayer = playerMapper.toDomain(p);
             int pontos = p.getStatPoints() != null ? p.getStatPoints() : 0;
 
@@ -236,7 +289,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
     private void renderClassChangeMenu() {
         clearScreen();
-        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow(() -> new GameException("Player not found: " + currentPlayer.getId()));
         List<JobClass> disponiveis = classChangeService.listarClassesDisponiveis(currentPlayer.getId());
 
         System.out.println("\n=== TROCAR CLASSE ===");
@@ -275,7 +328,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         try {
             classChangeService.trocarClasse(currentPlayer.getId(), novaClasse);
             System.out.println(">>> Voce agora e um(a) " + novaClasse.name() + "! Job Level resetado para 1.");
-        } catch (IllegalStateException e) {
+        } catch (GameException e) {
             System.out.println(">>> " + e.getMessage());
         }
     }
@@ -320,7 +373,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
     private void renderSkillsMenu() {
         while (true) {
             clearScreen();
-            PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+            PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow(() -> new GameException("Player not found: " + currentPlayer.getId()));
             int skillPts = p.getSkillPoints() != null ? p.getSkillPoints() : 0;
 
             List<SkillRowDTO> skills = skillService.listarSkillsDoPlayer(currentPlayer.getId());
@@ -384,7 +437,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
             try {
                 String resultado = skillService.aprenderSkill(currentPlayer.getId(), selecionada.aegisName());
                 System.out.println(">>> " + resultado);
-            } catch (IllegalStateException e) {
+            } catch (GameException e) {
                 System.out.println(">>> " + e.getMessage());
             }
         }
@@ -421,9 +474,9 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
         String aegisName = skills.get(escolha - 1).aegisName();
         try {
-            String resultado = skillService.usarSkillEmCombate(currentPlayer.getId(), aegisName, null);
+            String resultado = skillCombatService.usarSkillEmCombate(currentPlayer.getId(), aegisName, null);
             System.out.println(">>> " + resultado);
-        } catch (IllegalStateException e) {
+        } catch (GameException e) {
             System.out.println(">>> " + e.getMessage());
         }
         System.out.println("(Pressione ENTER para continuar)");
@@ -432,7 +485,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
     private void renderBattleMenu() {
         clearScreen();
-        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow(() -> new GameException("Player not found: " + currentPlayer.getId()));
 
         System.out.println("\n================================================");
         System.out.printf("  VOCE: HP %d/%d | SP %d/%d%n",
@@ -451,7 +504,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
             System.out.println("------------------------------------------------");
             System.out.println(resultado);
 
-            PlayerEntity pAtualizado = playerRepo.findById(currentPlayer.getId()).orElseThrow();
+            PlayerEntity pAtualizado = playerRepo.findById(currentPlayer.getId()).orElseThrow(() -> new GameException("Player not found: " + currentPlayer.getId()));
             System.out.printf("  >> Seu HP atual: %d/%d%n", pAtualizado.getHpCurrent(), pAtualizado.getHpMax());
             System.out.println("------------------------------------------------");
 
@@ -506,9 +559,9 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
         String aegisName = skills.get(escolha - 1).aegisName();
         try {
-            String resultado = skillService.usarSkillEmCombate(currentPlayer.getId(), aegisName, currentMonster.getId());
+            String resultado = skillCombatService.usarSkillEmCombate(currentPlayer.getId(), aegisName, currentMonster.getId());
             System.out.println(">>> " + resultado);
-        } catch (IllegalStateException e) {
+        } catch (GameException e) {
             System.out.println(">>> " + e.getMessage());
         }
         System.out.println("(Pressione ENTER para continuar)");
@@ -606,10 +659,6 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         inBattle = false;
         currentMonster = null;
         System.out.println("\n>>> VOCE MORREU! Ressuscitando em Prontera...");
-        playerService.ressuscitarJogador(currentPlayer.getId());
-        PlayerEntity p = playerRepo.findById(currentPlayer.getId()).orElseThrow();
-        p.setMapName("prontera");
-        playerRepo.save(p);
         System.out.println(">>> HP restaurado. Voce esta em Prontera.\n");
     }
 }

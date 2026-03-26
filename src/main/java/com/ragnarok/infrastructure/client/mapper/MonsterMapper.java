@@ -86,9 +86,11 @@ public class MonsterMapper {
     }
 
     // Helper: DropEntity -> DropDomain
+    // Rate no banco está em escala 0–100 (já normalizado na ingestão do SQL).
+    // BattleEngine usa a mesma escala 0–100: roll = nextDouble(0, 100), if roll < rate.
     private MonsterDrop mapDrop(MonsterDropEntity entity) {
         MonsterDrop drop = new MonsterDrop();
-        drop.setRate(entity.getRate());
+        drop.setRate(entity.getRate() != null ? entity.getRate() : 0.0);
 
         // Aqui usamos o ItemMapper para converter ItemEntity -> Item
         if (entity.getItem() != null) {

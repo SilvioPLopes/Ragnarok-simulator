@@ -4,6 +4,8 @@ import com.ragnarok.domain.model.EquipSlot;
 import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.domain.model.WeaponType;
 import com.ragnarok.infrastructure.persistence.ItemEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -16,6 +18,8 @@ import java.util.stream.Collectors;
 
 @Component
 public class ItemDbParser {
+
+    private static final Logger log = LoggerFactory.getLogger(ItemDbParser.class);
 
     public List<ItemEntity> parse(String yamlContent) {
         LoaderOptions options = new LoaderOptions();
@@ -71,7 +75,7 @@ public class ItemDbParser {
 
             return entity;
         } catch (Exception e) {
-            System.err.println("Erro ao parsear item: " + item.get("Name") + " — " + e.getMessage());
+            log.warn("Erro ao parsear item '{}': {}", item.get("Name"), e.getMessage());
             return null;
         }
     }

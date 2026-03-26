@@ -72,16 +72,4 @@ public class MonsterEntity {
         this.drops.add(drop);
     }
 
-    @OneToMany(mappedBy = "monster", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private java.util.List<MonsterSpawnEntity> spawns = new java.util.ArrayList<>();
-
-    // Método helper
-    public void addSpawn(GameMapEntity map, Integer amount, String respawnTime) {
-        MonsterSpawnEntity spawn = new MonsterSpawnEntity();
-        spawn.setMonster(this);
-        spawn.setMap(map);
-        spawn.setAmount(amount);
-        spawn.setRespawnTime(respawnTime);
-        this.spawns.add(spawn);
-    }
 }
