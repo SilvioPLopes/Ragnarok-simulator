@@ -215,7 +215,7 @@ Tabela: `trade_offers`
 
 ```
 infrastructure/persistence/
-  TradeOfferEntity.java
+  3TradeOfferEntity.java
   TradeOfferRepository.java
 
 application/service/
