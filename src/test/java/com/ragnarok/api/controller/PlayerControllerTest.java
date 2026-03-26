@@ -3,9 +3,12 @@ package com.ragnarok.api.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.CreatePlayerRequestDTO;
+import com.ragnarok.application.service.AccountService;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
+import com.ragnarok.infrastructure.security.JwtFilter;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -16,6 +19,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -27,6 +32,14 @@ class PlayerControllerTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
     @MockBean PlayerService playerService;
+    @MockBean AccountService accountService;
+    @MockBean JwtFilter jwtFilter;
+
+    @BeforeEach
+    void passFilterThrough() throws Exception {
+        doAnswer(inv -> { ((jakarta.servlet.FilterChain) inv.getArgument(2)).doFilter(inv.getArgument(0), inv.getArgument(1)); return null; })
+                .when(jwtFilter).doFilter(any(), any(), any());
+    }
 
     @Test
     void getPlayers_returnsEmptyList() throws Exception {

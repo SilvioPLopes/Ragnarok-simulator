@@ -4,9 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.UseSkillRequestDTO;
 import com.ragnarok.application.dto.SkillRowDTO;
+import com.ragnarok.application.service.AccountService;
 import com.ragnarok.application.service.SkillCombatService;
 import com.ragnarok.application.service.SkillService;
 import com.ragnarok.domain.exception.InsufficientSpException;
+import com.ragnarok.infrastructure.security.JwtFilter;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -17,6 +20,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -29,6 +34,14 @@ class SkillControllerTest {
     @Autowired ObjectMapper objectMapper;
     @MockBean SkillService skillService;
     @MockBean SkillCombatService skillCombatService;
+    @MockBean AccountService accountService;
+    @MockBean JwtFilter jwtFilter;
+
+    @BeforeEach
+    void passFilterThrough() throws Exception {
+        doAnswer(inv -> { ((jakarta.servlet.FilterChain) inv.getArgument(2)).doFilter(inv.getArgument(0), inv.getArgument(1)); return null; })
+                .when(jwtFilter).doFilter(any(), any(), any());
+    }
 
     @Test
     void listSkills_returnsList() throws Exception {

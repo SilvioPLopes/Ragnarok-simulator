@@ -2,11 +2,13 @@ package com.ragnarok.api.controller;
 
 import com.ragnarok.api.dto.request.CreatePlayerRequestDTO;
 import com.ragnarok.api.dto.response.PlayerResponseDTO;
+import com.ragnarok.application.service.AccountService;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,9 +21,11 @@ import java.util.List;
 public class PlayerController {
 
     private final PlayerService playerService;
+    private final AccountService accountService;
 
-    public PlayerController(PlayerService playerService) {
+    public PlayerController(PlayerService playerService, AccountService accountService) {
         this.playerService = playerService;
+        this.accountService = accountService;
     }
 
     @GetMapping
@@ -32,7 +36,11 @@ public class PlayerController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get player by ID")
-    public ResponseEntity<PlayerResponseDTO> getPlayer(@PathVariable Long id) {
+    public ResponseEntity<PlayerResponseDTO> getPlayer(@PathVariable Long id, HttpServletRequest request) {
+        Long accountId = (Long) request.getAttribute("accountId");
+        if (accountId != null) {
+            accountService.validateOwnership(accountId, id);
+        }
         return ResponseEntity.ok(toDTO(playerService.buscarPersonagem(id)));
     }
 
