@@ -48,6 +48,17 @@ public class ItemController {
         return ResponseEntity.ok(new SkillUseResponseDTO(itemService.usarItem(itemId)));
     }
 
+    @PostMapping("/{itemId}/equip")
+    @Operation(summary = "Equip or unequip an item (toggle)")
+    public ResponseEntity<SkillUseResponseDTO> equipItem(
+            @PathVariable Long playerId, @PathVariable UUID itemId, HttpServletRequest request) {
+        Long accountId = (Long) request.getAttribute("accountId");
+        if (accountId != null) {
+            accountService.validateOwnership(accountId, playerId);
+        }
+        return ResponseEntity.ok(new SkillUseResponseDTO(itemService.equiparItem(playerId, itemId)));
+    }
+
     private InventoryItemResponseDTO toDTO(PlayerItemEntity pi) {
         return new InventoryItemResponseDTO(
                 pi.getId().toString(),

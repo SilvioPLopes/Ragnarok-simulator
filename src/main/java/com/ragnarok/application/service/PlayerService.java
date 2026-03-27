@@ -8,9 +8,12 @@ import java.util.List;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
+import com.ragnarok.domain.exception.GameException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import java.util.Map;
 
 @Service
 public class PlayerService {
@@ -25,7 +28,7 @@ public class PlayerService {
         this.playerMapper = playerMapper;
     }
 
-    public Player criarNovoPersonagem(String nome, String classe) {
+    public Player criarNovoPersonagem(String nome, String classe, Long accountId) {
         if (playerRepository.existsByName(nome)) {
             log.warn("[PlayerService] Tentativa de criar personagem duplicado: nome='{}' já existe no banco.", nome);
             throw new IllegalStateException("Já existe um personagem com o nome: " + nome);
@@ -52,6 +55,7 @@ public class PlayerService {
 
         // 2. Converte para Entity (Infraestrutura)
         PlayerEntity entity = playerMapper.toEntity(novoPlayer);
+        entity.setAccountId(accountId);
 
         // 3. Salva no Banco
         PlayerEntity salvo = playerRepository.save(entity);
@@ -73,8 +77,44 @@ public class PlayerService {
         playerRepository.save(entity);
     }
 
-    public List<PlayerEntity> listarPersonagens() {
-        return playerRepository.findAll();
+    /**
+     * Distribui pontos de status do player.
+     * delta: mapa com chaves "str","agi","vit","int","dex","luk" e os pontos a adicionar em cada.
+     */
+    @Transactional
+    public PlayerEntity distribuirStats(Long playerId, Map<String, Integer> delta) {
+        PlayerEntity player = playerRepository.findById(playerId)
+                .orElseThrow(() -> new IllegalArgumentException("Player not found: " + playerId));
+
+        int totalGasto = delta.values().stream().filter(v -> v != null && v > 0).mapToInt(Integer::intValue).sum();
+        if (totalGasto <= 0) throw new GameException("Nenhum ponto distribuído.");
+
+        int disponivel = player.getStatPoints() != null ? player.getStatPoints() : 0;
+        if (totalGasto > disponivel) {
+            throw new GameException("Pontos insuficientes. Disponível: " + disponivel + ", tentou gastar: " + totalGasto + ".");
+        }
+
+        apply(delta, "str", player.getStr(), player::setStr);
+        apply(delta, "agi", player.getAgi(), player::setAgi);
+        apply(delta, "vit", player.getVit(), player::setVit);
+        apply(delta, "int", player.getIntelligence(), player::setIntelligence);
+        apply(delta, "dex", player.getDex(), player::setDex);
+        apply(delta, "luk", player.getLuk(), player::setLuk);
+
+        player.setStatPoints(disponivel - totalGasto);
+        log.info("[PlayerService] Player {} distribuiu {} pontos. Restante: {}.", playerId, totalGasto, disponivel - totalGasto);
+        return playerRepository.save(player);
+    }
+
+    private void apply(Map<String, Integer> delta, String key, Integer current, java.util.function.Consumer<Integer> setter) {
+        Integer val = delta.get(key);
+        if (val != null && val > 0) {
+            setter.accept((current != null ? current : 0) + val);
+        }
+    }
+
+    public List<PlayerEntity> listarPersonagens(Long accountId) {
+        return playerRepository.findByAccountId(accountId);
     }
 
     public PlayerEntity buscarPersonagem(Long id) {
