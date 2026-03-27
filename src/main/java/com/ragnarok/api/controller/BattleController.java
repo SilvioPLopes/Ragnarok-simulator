@@ -30,7 +30,7 @@ public class BattleController {
         if (accountId != null) {
             accountService.validateOwnership(accountId, req.playerId());
         }
-        String result = battleService.realizarAtaque(req.playerId(), req.monsterId());
-        return ResponseEntity.ok(new BattleResponseDTO(result));
+        BattleService.AttackResult result = battleService.realizarAtaque(req.playerId(), req.monsterId());
+        return ResponseEntity.ok(new BattleResponseDTO(result.message(), result.monsterHpRemaining()));
     }
 }

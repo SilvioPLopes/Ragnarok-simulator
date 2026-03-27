@@ -26,12 +26,17 @@ The core engine of a Ragnarok Online emulation and data-management system built 
 | Class Change | Operational | NOVICE → Tier1 → Tier2 → Tier3 with job level validation |
 | Auto Startup | Operational | `StartupDataLoader` populates all static tables on boot |
 | Schema Management | Operational | Flyway V1 migration; Hibernate validates on startup |
-| Resilience4j | Operational | `@Retry` (3 attempts, 2 s exponential backoff) + `@CircuitBreaker` on rAthena download |
+| JWT Authentication | Operational | `JwtFilter` (`@Order(1)`) validates `Authorization: Bearer` on all `/api/*` routes; public paths: `/api/accounts/register`, `/api/accounts/login` |
+| CORS Configuration | Operational | `FilterRegistrationBean<CorsFilter>` at `HIGHEST_PRECEDENCE` — allows `http://localhost:3000` (all methods/headers) |
+| Account System | Operational | `AccountController`: register + login returning `{token, accountId}`; `AccountService.LoginResult` record |
+| Player Ownership | Operational | `accountId` stored on player creation; `GET /api/players` filters by JWT owner; `validateOwnership` guards all player routes |
+| Antifraude Integration | Operational | `FraudClient` calls `POST http://localhost:8081/api/fraud/analyze`; Resilience4j CircuitBreaker — fail-open returns `APPROVED` if antifraude is down |
+| Resilience4j | Operational | `@Retry` (3 attempts, 2 s exponential backoff) + `@CircuitBreaker` on antifraude calls |
 | Spring Cache (Caffeine) | Operational | `weaponSizeModifiers`, `skillBuffEffects`, `skillTree`, `playerSkills` — zero repeated queries in battle |
-| REST API + Swagger UI | Operational | Full game loop via browser: Players, Battle, Skills, Inventory, Map — `GET /swagger-ui.html` |
-| Spring Events | Operational | `BattleService` publishes `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` handles loot, XP, resurrection |
+| REST API + Swagger UI | Operational | Full game loop via browser: Players, Battle, Skills, Inventory, Map, Auth — `GET /swagger-ui.html` |
+| Spring Events | Operational | `BattleService` + `SkillCombatService` publish `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` handles loot, XP, resurrection |
 | Testcontainers | Operational | All integration tests use an ephemeral PostgreSQL container — no local DB required for `./mvnw test` |
-| Test Coverage | **240 tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
+| Test Coverage | **240+ tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
 
 ---
 
@@ -71,14 +76,17 @@ Exposes the full game loop as a REST API with OpenAPI documentation via **spring
 
 | Controller | Endpoints |
 |---|---|
-| `PlayerController` | `GET /api/players`, `GET /api/players/{id}`, `POST /api/players` |
+| `AccountController` | `POST /api/accounts/register`, `POST /api/accounts/login` (returns `{token, accountId}`) |
+| `PlayerController` | `GET /api/players`, `GET /api/players/{id}`, `POST /api/players`, `PUT /{id}/stats`, `POST /{id}/resurrect`, `GET /{id}/class-change`, `POST /{id}/class-change` |
 | `BattleController` | `POST /api/battle/attack` |
 | `SkillController` | `GET /api/players/{id}/skills`, `POST .../learn`, `POST .../use` |
-| `ItemController` | `GET /api/players/{id}/inventory`, `POST .../inventory/{itemId}/use` |
+| `ItemController` | `GET /api/players/{id}/inventory`, `POST .../inventory/{itemId}/use`, `POST .../inventory/{itemId}/equip` |
 | `MapController` | `GET /api/players/{id}/map`, `GET /api/maps/{mapId}/portals`, `POST .../walk`, `POST .../travel` |
 | `GlobalExceptionHandler` | `@RestControllerAdvice`: maps domain exceptions to HTTP 400/404/500 |
 
-**Swagger UI:** `http://localhost:8080/swagger-ui.html` — interactive docs for all 5 groups without cloning the repo.
+**Swagger UI:** `http://localhost:8080/swagger-ui.html` — interactive docs for all groups without cloning the repo.
+
+> All routes under `/api/*` require `Authorization: Bearer <token>` except `/api/accounts/register` and `/api/accounts/login`.
 
 ### 4. Infrastructure (`com.ragnarok.infrastructure`)
 
@@ -93,7 +101,7 @@ Exposes the full game loop as a REST API with OpenAPI documentation via **spring
 
 | Class | Order | Function |
 |---|---|---|
-| `RathenaImporter` | `@Order(1)` | Imports monsters and items from rAthena GitHub automatically on startup |
+| `RathenaImporter` | `@Order(1)` | Imports monsters and items from **local classpath** YAML files (`src/main/resources/rathena/`); threshold check: ≥2600 monsters / ≥25000 items before skipping re-import |
 | `PlayerSeedLoader` | `@Order(2)` | Creates the initial player |
 | `StartupDataLoader` | `@Order(3)` | Populates `maps`, `map_portals`, `map_monsters`, `monster_drops`, `skills`, `skill_tree`, `skill_buff_effects`, and `weapon_size_modifiers` from SQLs in `src/main/resources/db/` |
 | `RagnarokTerminalRunner` | — | Terminal UI, exploration and combat game loop |
@@ -268,6 +276,48 @@ ETL pipeline that extracts data directly from rAthena repositories via GitHub an
 ```bash
 pip install requests pyyaml psycopg2-binary --break-system-packages
 ```
+
+---
+
+## Antifraude Integration
+
+`ragnarok-core` integrates with `ragnarok-antifraude` (port 8081) to detect botting and cheating during gameplay.
+
+### Request flow
+
+```
+[Client] → POST /api/battle/attack / /map/walk
+  └─ BattleService / MapService
+       └─ FraudClient.analyze(FraudRequest)
+            └─ POST http://localhost:8081/api/fraud/analyze
+                 Header: X-API-Key: dev-key-123
+                 └─ FraudResponse { verdict, requiredAction, riskLevel }
+```
+
+### Fault tolerance
+
+`FraudClient` is wrapped with a Resilience4j **CircuitBreaker**. If antifraude is unreachable or slow:
+- Circuit opens after 5 failures
+- Fallback returns `verdict=APPROVED, requiredAction=NONE` — game never blocks
+- Antifraude can be started/stopped independently; core continues normally
+
+### Shared types
+
+| Enum | Values |
+|---|---|
+| `Verdict` | `APPROVED`, `BLOCKED`, `CHALLENGE`, `UNKNOWN` |
+| `RequiredAction` | `NONE`, `CANCEL_ACTION`, `SHOW_CAPTCHA`, `DROP_SESSION`, `FLAG_FOR_REVIEW`, `ALERT_ONLY` |
+| `RiskLevel` | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
+
+### Starting antifraude
+
+```bash
+cd ragnarok-simulator/ragnarok-antifraude
+docker compose up -d   # PostgreSQL + Redis
+DB_PASS=postgre ANTIFRAUDE_API_KEY=dev-key-123 ./mvnw spring-boot:run
+```
+
+The `fraud` field appears in battle/walk responses when antifraude is active.
 
 ---
 
@@ -491,14 +541,22 @@ com.ragnarok
 - **Resilience4j:** `@Retry` (3 attempts, 2 s exponential backoff) + `@CircuitBreaker` on `RathenaDownloadService`; fallback logs WARN and skips import
 - **Testcontainers:** `AbstractIntegrationTest` (Singleton Container Pattern) — all integration tests use an ephemeral `postgres:16` container; no local DB required for `./mvnw test`
 - **Spring Cache (Caffeine):** `@EnableCaching` + `CacheConfig` with 4 named caches; `@Cacheable` / `@CacheEvict` on `WeaponSizeService`, `SkillService`, `SkillTreeRepository`, `SkillBuffEffectRepository`
-- **REST API + Swagger UI:** 5 controllers (Players, Battle, Skills, Inventory, Map), `GlobalExceptionHandler`, springdoc-openapi — full game loop playable at `http://localhost:8080/swagger-ui.html`
-- **Spring Events:** `BattleService` decoupled via `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` owns loot persistence, XP processing, and player resurrection
+- **REST API + Swagger UI:** 6 controllers (Auth, Players, Battle, Skills, Inventory, Map), `GlobalExceptionHandler`, springdoc-openapi — full game loop playable at `http://localhost:8080/swagger-ui.html`
+- **Spring Events:** `BattleService` + `SkillCombatService` decoupled via `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` owns loot persistence, XP processing, and player resurrection
+- **JWT Authentication:** `JwtFilter` at `@Order(1)` for all `/api/*` routes; `AccountService` issues and validates tokens; login returns `{token, accountId}`
+- **CORS:** `FilterRegistrationBean<CorsFilter>` at `HIGHEST_PRECEDENCE` — OPTIONS preflight passes before JWT check; allows `http://localhost:3000`
+- **Account ownership:** `accountId` saved on player creation, `GET /api/players` filters by JWT owner, `validateOwnership` guards all player endpoints
+- **4 missing endpoints implemented:** `PUT /api/players/{id}/stats` (stat distribution), `POST /{id}/resurrect`, `GET/POST /{id}/class-change`, `POST /inventory/{itemId}/equip`
+- **SkillCombatService death detection:** skill kill fires `MonsterKilledEvent` with loot+exp; `VITÓRIA` message returned to caller
+- **RathenaImporter local classpath:** reads from `src/main/resources/rathena/` instead of GitHub; threshold checks prevent re-import of already-populated data
+- **PlayerSeedLoader duplicate guard:** fixed from `existsById(1L)` to `existsByName("Hero")` — restarts no longer create duplicate seed players
+- **Antifraude integration:** `FraudClient` calls antifraude microservice; Resilience4j CircuitBreaker with fail-open fallback
 
 ### Backlog
 
 #### High Priority
 
-1. **Use skills in battle (terminal)** — `usarSkillEmCombate` exists in `SkillCombatService`; integrate into combat menu with skill selection and target
+1. **`BattleResponseDTO` — multi-round fields** — add `monsterAlive` + `monsterHpRemaining` to the battle response so the front-end can loop attacks until the monster dies
 2. **Use items in battle** — add "Item" option to combat menu for consumables in inventory
 3. **Missing stat mechanics:**
    - **AGI** → FLEE (evasion) and ASPD (attack speed)
