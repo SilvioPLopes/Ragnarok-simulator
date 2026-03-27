@@ -1,11 +1,15 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.event.MonsterKilledEvent;
 import com.ragnarok.domain.exception.*;
 import com.ragnarok.domain.model.*;
 import com.ragnarok.domain.service.BattleEngine;
 import com.ragnarok.infrastructure.client.mapper.MonsterMapper;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.infrastructure.persistence.mapper.BuffSerializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Responsável pelo uso de skills durante o combate.
@@ -21,6 +26,8 @@ import java.util.Map;
  */
 @Service
 public class SkillCombatService {
+
+    private static final Logger log = LoggerFactory.getLogger(SkillCombatService.class);
 
     private final PlayerRepository playerRepository;
     private final SkillRepository skillRepository;
@@ -33,6 +40,7 @@ public class SkillCombatService {
     private final MonsterMapper monsterMapper;
     private final WeaponSizeService weaponSizeService;
     private final PlayerItemRepository playerItemRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public SkillCombatService(PlayerRepository playerRepository,
                               SkillRepository skillRepository,
@@ -44,7 +52,8 @@ public class SkillCombatService {
                               BattleEngine battleEngine,
                               MonsterMapper monsterMapper,
                               WeaponSizeService weaponSizeService,
-                              PlayerItemRepository playerItemRepository) {
+                              PlayerItemRepository playerItemRepository,
+                              ApplicationEventPublisher eventPublisher) {
         this.playerRepository = playerRepository;
         this.skillRepository = skillRepository;
         this.playerSkillRepository = playerSkillRepository;
@@ -56,6 +65,7 @@ public class SkillCombatService {
         this.monsterMapper = monsterMapper;
         this.weaponSizeService = weaponSizeService;
         this.playerItemRepository = playerItemRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -67,7 +77,8 @@ public class SkillCombatService {
                 .filter(ps -> ps.getCurrentLevel() > 0)
                 .orElseThrow(() -> new GameException("Você não aprendeu " + aegisName + " ainda."));
 
-        PlayerEntity playerEntity = playerRepository.findById(playerId).orElseThrow(() -> new GameException("Player not found: " + playerId));
+        PlayerEntity playerEntity = playerRepository.findById(playerId)
+                .orElseThrow(() -> new GameException("Player not found: " + playerId));
         int spAtual = playerEntity.getSpCurrent() != null ? playerEntity.getSpCurrent() : 0;
         int spCusto = skill.getSpCost() != null ? skill.getSpCost() : 10;
         int skillLevel = playerSkill.getCurrentLevel();
@@ -121,6 +132,19 @@ public class SkillCombatService {
             playerRepository.save(playerEntity);
 
             String elementInfo = skill.getElement() != null ? " [" + skill.getElement() + "]" : "";
+
+            if (novoHp <= 0) {
+                log.info("[SkillCombat] Player {} derrotou {} com {}.", playerId, monster.getName(), aegisName);
+                List<Item> loot = battleEngine.calculateLoot(monster);
+                long baseExp = monster.getBaseExp() != null ? monster.getBaseExp() : 0L;
+                long jobExp  = monster.getJobExp()  != null ? monster.getJobExp()  : 0L;
+                eventPublisher.publishEvent(new MonsterKilledEvent(playerId, monsterId, loot, baseExp, jobExp));
+                String dropLog = loot.isEmpty() ? "" :
+                        "\nDrop: " + loot.stream().map(Item::getName).collect(Collectors.joining(", "));
+                return String.format("\uD83C\uDF1F VITÓRIA via %s%s! O %s foi derrotado com %d de dano.%s",
+                        aegisName, elementInfo, monster.getName(), finalDamage, dropLog);
+            }
+
             return String.format("Você usou %s%s e causou %d de dano. HP do monstro: %d.",
                     aegisName, elementInfo, finalDamage, novoHp);
         }
@@ -193,12 +217,27 @@ public class SkillCombatService {
         }
 
         if (result.damage() > 0 && monsterId != null) {
-            MonsterEntity monster = monsterRepository.findById(monsterId)
+            MonsterEntity monsterEntity = monsterRepository.findById(monsterId)
                     .orElseThrow(() -> new GameException("Monstro não encontrado."));
-            int novoHp = Math.max(0, (monster.getHp() != null ? monster.getHp() : 0) - result.damage());
-            monster.setHp(novoHp);
-            monsterRepository.save(monster);
+            int hpAtual = monsterEntity.getHp() != null ? monsterEntity.getHp() : 0;
+            int novoHp = Math.max(0, hpAtual - result.damage());
+            monsterEntity.setHp(novoHp);
+            monsterRepository.save(monsterEntity);
             playerRepository.save(playerEntity);
+
+            if (novoHp <= 0) {
+                log.info("[SkillCombat] Player {} derrotou monstro {} com {} (fallback).", playerId, monsterId, aegisName);
+                Monster monster = monsterMapper.toDomain(monsterEntity);
+                List<Item> loot = battleEngine.calculateLoot(monster);
+                long baseExp = monster.getBaseExp() != null ? monster.getBaseExp() : 0L;
+                long jobExp  = monster.getJobExp()  != null ? monster.getJobExp()  : 0L;
+                eventPublisher.publishEvent(new MonsterKilledEvent(playerId, monsterId, loot, baseExp, jobExp));
+                String dropLog = loot.isEmpty() ? "" :
+                        "\nDrop: " + loot.stream().map(Item::getName).collect(Collectors.joining(", "));
+                return String.format("\uD83C\uDF1F VITÓRIA via %s! Causou %d de dano e derrotou o monstro.%s",
+                        aegisName, result.damage(), dropLog);
+            }
+
             return String.format("Você usou %s e causou %d de dano. HP do monstro: %d.",
                     aegisName, result.damage(), novoHp);
         }

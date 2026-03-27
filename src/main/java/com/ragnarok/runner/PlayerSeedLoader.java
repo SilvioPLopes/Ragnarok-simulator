@@ -18,7 +18,7 @@ public class PlayerSeedLoader {
     @Order(2)
     public CommandLineRunner initPlayer(PlayerRepository playerRepo) {
         return args -> {
-            if (!playerRepo.existsById(1L)) {
+            if (!playerRepo.existsByName("Hero")) {
                 PlayerEntity p = new PlayerEntity();
                 p.setName("Hero");
                 p.setJobClass("Novice");
@@ -41,7 +41,10 @@ public class PlayerSeedLoader {
                 log.info("Player inicial 'Hero' criado.");
             } else {
                 // Garante campos não-nulos em saves antigos
-                PlayerEntity p = playerRepo.findById(1L).orElseThrow(() -> new RuntimeException("Player seed not found: id=1"));
+                PlayerEntity p = playerRepo.findAll().stream()
+                        .filter(e -> "Hero".equals(e.getName()))
+                        .findFirst()
+                        .orElseThrow(() -> new RuntimeException("Player seed 'Hero' not found"));
                 boolean dirty = false;
                 if (p.getBaseExp()    == null) { p.setBaseExp(0L);    dirty = true; }
                 if (p.getJobExp()     == null) { p.setJobExp(0L);     dirty = true; }

@@ -27,6 +27,10 @@ public class JwtFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            chain.doFilter(request, response);
+            return;
+        }
         if (PUBLIC_PATHS.contains(request.getRequestURI())) {
             chain.doFilter(request, response);
             return;

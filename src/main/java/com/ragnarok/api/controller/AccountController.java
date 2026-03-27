@@ -30,7 +30,7 @@ public class AccountController {
     @PostMapping("/login")
     public LoginResponseDTO login(@RequestBody LoginRequestDTO dto, HttpServletRequest request) {
         String ip = request.getRemoteAddr();
-        String token = accountService.login(dto.username(), dto.password(), ip);
-        return new LoginResponseDTO(token, null);
+        AccountService.LoginResult result = accountService.login(dto.username(), dto.password(), ip);
+        return new LoginResponseDTO(result.token(), result.accountId());
     }
 }

@@ -9,8 +9,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,73 +24,71 @@ public class RathenaImporter implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(RathenaImporter.class);
 
-    private static final String MOB_DB_URL =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/re/mob_db.yml";
-    private static final String ITEM_DB_USABLE =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/re/item_db_usable.yml";
-    private static final String ITEM_DB_EQUIP =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/re/item_db_equip.yml";
-    private static final String ITEM_DB_ETC =
-            "https://raw.githubusercontent.com/rathena/rathena/master/db/re/item_db_etc.yml";
+    private static final int MONSTER_MIN_EXPECTED = 2600;
+    private static final int ITEM_MIN_EXPECTED    = 25_000;
 
     private final MonsterRepository monsterRepo;
     private final ItemRepository itemRepo;
     private final MobDbParser mobParser;
     private final ItemDbParser itemParser;
-    private final RathenaDownloadService downloadService;
 
     public RathenaImporter(MonsterRepository monsterRepo,
                            ItemRepository itemRepo,
                            MobDbParser mobParser,
-                           ItemDbParser itemParser,
-                           RathenaDownloadService downloadService) {
+                           ItemDbParser itemParser) {
         this.monsterRepo = monsterRepo;
         this.itemRepo    = itemRepo;
         this.mobParser   = mobParser;
         this.itemParser  = itemParser;
-        this.downloadService = downloadService;
     }
 
     @Override
     public void run(String... args) {
-        if (monsterRepo.count() == 0) {
-            log.info("Importing monsters from rAthena...");
-            String yaml = downloadService.download(MOB_DB_URL);
-            if (yaml != null) {
-                List<MonsterEntity> monsters = mobParser.parse(yaml);
-                monsterRepo.saveAll(monsters);
-                log.info("Imported {} monsters.", monsters.size());
-            } else {
-                log.warn("Monster import skipped — download returned null.");
-            }
-        } else {
-            log.info("Monsters already exist in the database. Skipping import.");
-        }
+        importMonsters();
+        importItems();
+    }
 
-        if (itemRepo.count() == 0) {
-            log.info("Importing items from rAthena...");
-            List<ItemEntity> todos = new ArrayList<>();
-            todos.addAll(parsearArquivo("Usable", ITEM_DB_USABLE));
-            todos.addAll(parsearArquivo("Equip",  ITEM_DB_EQUIP));
-            todos.addAll(parsearArquivo("Etc",    ITEM_DB_ETC));
-            if (!todos.isEmpty()) {
-                itemRepo.saveAll(todos);
-                log.info("Imported {} items total.", todos.size());
-            }
-        } else {
-            log.info("Items already exist in the database. Skipping import.");
+    private void importMonsters() {
+        long count = monsterRepo.count();
+        if (count >= MONSTER_MIN_EXPECTED) {
+            log.info("Monsters already complete ({} in DB). Skipping import.", count);
+            return;
+        }
+        log.info("Importing monsters from classpath (current: {})...", count);
+        List<MonsterEntity> monsters = mobParser.parse(readClasspath("rathena/mob_db.yml"));
+        monsterRepo.saveAll(monsters);
+        log.info("Imported {} monsters.", monsters.size());
+    }
+
+    private void importItems() {
+        long count = itemRepo.count();
+        if (count >= ITEM_MIN_EXPECTED) {
+            log.info("Items already complete ({} in DB). Skipping import.", count);
+            return;
+        }
+        log.info("Importing items from classpath (current: {})...", count);
+        List<ItemEntity> todos = new ArrayList<>();
+        todos.addAll(parseItem("item_db_usable.yml", "Usable"));
+        todos.addAll(parseItem("item_db_equip.yml",  "Equip"));
+        todos.addAll(parseItem("item_db_etc.yml",    "Etc"));
+        if (!todos.isEmpty()) {
+            itemRepo.saveAll(todos);
+            log.info("Imported {} items total.", todos.size());
         }
     }
 
-    private List<ItemEntity> parsearArquivo(String nome, String url) {
-        log.info("  Downloading {} items...", nome);
-        String yaml = downloadService.download(url);
-        if (yaml == null) {
-            log.warn("  {} item download skipped — download returned null.", nome);
-            return List.of();
-        }
-        List<ItemEntity> itens = itemParser.parse(yaml);
-        log.info("  Parsed {} items from {}.", itens.size(), nome);
+    private List<ItemEntity> parseItem(String filename, String label) {
+        log.info("  Parsing {} items...", label);
+        List<ItemEntity> itens = itemParser.parse(readClasspath("rathena/" + filename));
+        log.info("  Parsed {} items from {}.", itens.size(), label);
         return itens;
+    }
+
+    private String readClasspath(String path) {
+        try {
+            return new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot read local rAthena file: " + path, e);
+        }
     }
 }

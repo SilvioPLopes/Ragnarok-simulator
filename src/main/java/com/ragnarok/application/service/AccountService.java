@@ -43,18 +43,21 @@ public class AccountService {
         return saved.getId();
     }
 
-    public String login(String username, String password, String ipAddress) {
+    public record LoginResult(String token, Long accountId) {}
+
+    public LoginResult login(String username, String password, String ipAddress) {
         AccountEntity account = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Credenciais invalidas"));
+                .orElseThrow(() -> new GameException("Credenciais invalidas"));
         if (!passwordEncoder.matches(password, account.getPasswordHash())) {
-            throw new IllegalArgumentException("Credenciais invalidas");
+            throw new GameException("Credenciais invalidas");
         }
         FraudClient.FraudDecision decision = fraudClient.checkLogin(
                 account.getId(), ipAddress, "BR", account.isEmailVerified(), account.isAgeVerified());
         if (decision.isBlocked()) {
             throw new GameException("Acesso bloqueado pelo sistema antifraude");
         }
-        return jwtUtil.generateToken(account.getId());
+        String token = jwtUtil.generateToken(account.getId());
+        return new LoginResult(token, account.getId());
     }
 
     public void validateOwnership(Long accountId, Long playerId) {

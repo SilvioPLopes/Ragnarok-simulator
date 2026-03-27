@@ -8,10 +8,14 @@ import java.util.List;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class PlayerService {
+
+    private static final Logger log = LoggerFactory.getLogger(PlayerService.class);
 
     private final PlayerRepository playerRepository;
     private final PlayerMapper playerMapper;
@@ -22,6 +26,10 @@ public class PlayerService {
     }
 
     public Player criarNovoPersonagem(String nome, String classe) {
+        if (playerRepository.existsByName(nome)) {
+            log.warn("[PlayerService] Tentativa de criar personagem duplicado: nome='{}' já existe no banco.", nome);
+            throw new IllegalStateException("Já existe um personagem com o nome: " + nome);
+        }
         // 1. Cria o Domínio Puro
         Player novoPlayer = new Player();
         novoPlayer.setName(nome);

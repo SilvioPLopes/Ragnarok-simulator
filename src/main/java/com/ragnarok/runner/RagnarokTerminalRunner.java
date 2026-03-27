@@ -561,6 +561,11 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         try {
             String resultado = skillCombatService.usarSkillEmCombate(currentPlayer.getId(), aegisName, currentMonster.getId());
             System.out.println(">>> " + resultado);
+            monsterRepo.findById(currentMonster.getId()).ifPresent(m -> currentMonster = m);
+            if (resultado.contains("VITÓRIA") || resultado.contains("VITORIA")) {
+                inBattle = false;
+                currentMonster = null;
+            }
         } catch (GameException e) {
             System.out.println(">>> " + e.getMessage());
         }
