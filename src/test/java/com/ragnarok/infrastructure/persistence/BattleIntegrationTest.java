@@ -98,7 +98,7 @@ class BattleIntegrationTest extends AbstractIntegrationTest {
         // 6. EXECUÇÃO: A BATALHA
         // =================================================================================
         System.out.println("5. Executando Ataque...");
-        String battleLog = battleService.realizarAtaque(player.getId(), monster.getId());
+        String battleLog = battleService.realizarAtaque(player.getId(), monster.getId()).message();
 
         System.out.println(">>> RESULTADO: " + battleLog);
 
@@ -145,7 +145,7 @@ class BattleIntegrationTest extends AbstractIntegrationTest {
         monster.setAttack(500);
         monster = monsterRepository.save(monster);
 
-        String battleLog = battleService.realizarAtaque(player.getId(), monster.getId());
+        String battleLog = battleService.realizarAtaque(player.getId(), monster.getId()).message();
 
         assertTrue(battleLog.startsWith("FATAL:"), "ERRO: O fluxo não interrompeu na morte do jogador.");
         assertTrue(battleLog.contains("você morreu"), "ERRO: Mensagem de Game Over ausente no log.");

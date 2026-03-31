@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/SilvioPLopes/ragnarok-core/actions/workflows/ci.yml/badge.svg)
 ![Coverage](https://img.shields.io/badge/coverage-85%25%2B-brightgreen)
-![Tests](https://img.shields.io/badge/tests-240%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-260%2B%20passing-brightgreen)
 
 The core engine of a Ragnarok Online emulation and data-management system built on **Hexagonal Architecture (Ports and Adapters)**. All game data (monsters, items, maps, warps, drops, skills) is imported directly from the official **rAthena** server (`db/re/` — Renewal version).
 
@@ -30,13 +30,17 @@ The core engine of a Ragnarok Online emulation and data-management system built 
 | CORS Configuration | Operational | `FilterRegistrationBean<CorsFilter>` at `HIGHEST_PRECEDENCE` — allows `http://localhost:3000` (all methods/headers) |
 | Account System | Operational | `AccountController`: register + login returning `{token, accountId}`; `AccountService.LoginResult` record |
 | Player Ownership | Operational | `accountId` stored on player creation; `GET /api/players` filters by JWT owner; `validateOwnership` guards all player routes |
+| Trade System | Operational | P2P item offers between players — create, accept, reject, cancel; `TradeService` + `TradeOfferEntity` |
+| NPC Shop | Operational | Buy/sell items at fixed prices via `NpcShopService`; Zenny validation |
+| Cash Shop | Operational | Premium items purchasable with `cashPoints`; `CashShopService` + `CashShopItemEntity` |
+| Market | Operational | Player-to-player marketplace — list, buy, cancel listings; fraud check on purchase; `MarketService` + `MarketListingEntity` |
 | Antifraude Integration | Operational | `FraudClient` calls `POST http://localhost:8081/api/fraud/analyze`; Resilience4j CircuitBreaker — fail-open returns `APPROVED` if antifraude is down |
 | Resilience4j | Operational | `@Retry` (3 attempts, 2 s exponential backoff) + `@CircuitBreaker` on antifraude calls |
 | Spring Cache (Caffeine) | Operational | `weaponSizeModifiers`, `skillBuffEffects`, `skillTree`, `playerSkills` — zero repeated queries in battle |
 | REST API + Swagger UI | Operational | Full game loop via browser: Players, Battle, Skills, Inventory, Map, Auth — `GET /swagger-ui.html` |
 | Spring Events | Operational | `BattleService` + `SkillCombatService` publish `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` handles loot, XP, resurrection |
 | Testcontainers | Operational | All integration tests use an ephemeral PostgreSQL container — no local DB required for `./mvnw test` |
-| Test Coverage | **240+ tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
+| Test Coverage | **260+ tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
 
 ---
 
@@ -58,6 +62,7 @@ The project strictly follows the separation of concerns of hexagonal architectur
 
 | Service | Responsibility |
 |---|---|
+| `AccountService` | Register account (BCrypt), login (JWT issue), `validateOwnership(accountId, playerId)` |
 | `BattleService` | Combat turn: damage, counter-attack, weapon-size modifier; publishes `MonsterKilledEvent` / `PlayerDiedEvent` |
 | `BattleEventHandler` | `@EventListener`: persists loot, processes XP via `LevelingService`, publishes `PlayerLeveledUpEvent`, resurrects player |
 | `SkillService` | Class-chain listing, prerequisite validation, and skill learning |
@@ -66,6 +71,10 @@ The project strictly follows the separation of concerns of hexagonal architectur
 | `ItemService` | Inventory management, equip/unequip, auto slot-swap |
 | `MapService` | Current map info, portal listing, walk (random encounter), and travel between maps |
 | `PlayerService` | Character creation and management |
+| `TradeService` | P2P trade offer lifecycle: create, accept, reject, cancel; validates item ownership |
+| `NpcShopService` | Buy items at fixed prices; sell items for Zenny; validates inventory and funds |
+| `CashShopService` | Purchase premium items with `cashPoints`; fraud check via `FraudClient` |
+| `MarketService` | Create listings, buy from listings (transfers item + Zenny), cancel — fraud check on buy |
 | `MonsterCatalogService` | Monster ETL via external API |
 | `WeaponSizeService` | Size modifier lookup by weapon type and monster size (`@Cacheable`) |
 | `ScriptInterpreter` | Formula evaluation engine (`"ATK * skill_lv * 1.3"`) |
@@ -78,11 +87,15 @@ Exposes the full game loop as a REST API with OpenAPI documentation via **spring
 |---|---|
 | `AccountController` | `POST /api/accounts/register`, `POST /api/accounts/login` (returns `{token, accountId}`) |
 | `PlayerController` | `GET /api/players`, `GET /api/players/{id}`, `POST /api/players`, `PUT /{id}/stats`, `POST /{id}/resurrect`, `GET /{id}/class-change`, `POST /{id}/class-change` |
-| `BattleController` | `POST /api/battle/attack` |
-| `SkillController` | `GET /api/players/{id}/skills`, `POST .../learn`, `POST .../use` |
+| `BattleController` | `POST /api/battle/attack` → `{message, monsterHpRemaining}` |
+| `SkillController` | `GET /api/players/{id}/skills` → includes `targetable` flag, `POST .../learn`, `POST .../use` |
 | `ItemController` | `GET /api/players/{id}/inventory`, `POST .../inventory/{itemId}/use`, `POST .../inventory/{itemId}/equip` |
 | `MapController` | `GET /api/players/{id}/map`, `GET /api/maps/{mapId}/portals`, `POST .../walk`, `POST .../travel` |
-| `GlobalExceptionHandler` | `@RestControllerAdvice`: maps domain exceptions to HTTP 400/404/500 |
+| `TradeController` | `POST /api/trade/offers`, `GET .../received/{playerId}`, `GET .../sent/{playerId}`, `POST .../{id}/accept`, `POST .../{id}/reject`, `POST .../{id}/cancel` |
+| `NpcShopController` | `GET /api/shop/npc/items`, `POST .../buy`, `POST .../sell` |
+| `CashShopController` | `GET /api/shop/cash/items`, `POST .../buy` |
+| `MarketController` | `GET /api/market/listings`, `POST /api/market/listings`, `POST .../{id}/buy`, `POST .../{id}/cancel` |
+| `GlobalExceptionHandler` | `@RestControllerAdvice`: maps domain exceptions to HTTP 400/404/409/500 |
 
 **Swagger UI:** `http://localhost:8080/swagger-ui.html` — interactive docs for all groups without cloning the repo.
 
@@ -328,31 +341,44 @@ com.ragnarok
 ├── api
 │   ├── GlobalExceptionHandler.java       # @RestControllerAdvice — maps exceptions to HTTP codes
 │   ├── controller
+│   │   ├── AccountController.java        # POST /api/accounts/register|login
 │   │   ├── BattleController.java         # POST /api/battle/attack
+│   │   ├── CashShopController.java       # GET/POST /api/shop/cash
 │   │   ├── ItemController.java           # GET/POST /api/players/{id}/inventory
 │   │   ├── MapController.java            # GET/POST /api/players/{id}/map
+│   │   ├── MarketController.java         # GET/POST /api/market/listings
+│   │   ├── NpcShopController.java        # GET/POST /api/shop/npc
 │   │   ├── PlayerController.java         # GET/POST /api/players
-│   │   └── SkillController.java          # GET/POST /api/players/{id}/skills
+│   │   ├── SkillController.java          # GET/POST /api/players/{id}/skills
+│   │   └── TradeController.java          # GET/POST /api/trade/offers
 │   └── dto
-│       ├── request/                      # AttackRequestDTO, CreatePlayerRequestDTO, TravelRequestDTO, UseSkillRequestDTO
-│       └── response/                     # PlayerResponseDTO, BattleResponseDTO, SkillRowResponseDTO,
-│                                         # InventoryItemResponseDTO, MapInfoResponseDTO, WalkResponseDTO
+│       ├── request/                      # AttackRequestDTO, CreatePlayerRequestDTO, TravelRequestDTO,
+│       │                                 # UseSkillRequestDTO, TradeOfferRequestDTO, ShopBuyRequestDTO, ShopSellRequestDTO
+│       └── response/                     # PlayerResponseDTO, BattleResponseDTO (message + monsterHpRemaining),
+│                                         # SkillRowResponseDTO (includes targetable bool), InventoryItemResponseDTO,
+│                                         # MapInfoResponseDTO, WalkResponseDTO, TradeOfferResponseDTO,
+│                                         # MarketListingResponseDTO, ShopItemResponseDTO
 │
 ├── application
 │   ├── dto
 │   │   ├── SkillRowDTO.java              # Public record for skill display in the terminal
 │   │   └── WalkResult.java              # record: encounterOccurred, monsterId, message
 │   └── service
+│       ├── AccountService.java           # Register (BCrypt), login (JWT), validateOwnership
 │       ├── BattleEventHandler.java       # @EventListener: loot persistence, XP, resurrection
 │       ├── BattleService.java            # Combat turn; publishes MonsterKilledEvent / PlayerDiedEvent
+│       ├── CashShopService.java          # Premium item purchase with cashPoints + fraud check
 │       ├── ClassChangeService.java       # Class progression
 │       ├── ItemService.java              # Inventory, equip, auto-swap
 │       ├── MapService.java               # Current map, portals, walk, travel
+│       ├── MarketService.java            # Player marketplace: list, buy (Zenny transfer), cancel
 │       ├── MonsterCatalogService.java    # Monster ETL via external API
+│       ├── NpcShopService.java           # Buy at fixed prices / sell for Zenny
 │       ├── PlayerService.java            # Character creation and management
 │       ├── ScriptInterpreter.java        # Formula engine: "ATK * skill_lv * 1.3"
 │       ├── SkillCombatService.java       # Skill usage in combat (HEAL, BUFF, DAMAGE)
 │       ├── SkillService.java             # Listing (class chain), learning, passive application
+│       ├── TradeService.java             # P2P offer lifecycle: create, accept, reject, cancel
 │       └── WeaponSizeService.java        # Damage modifier: weapon_type × monster_size (@Cacheable)
 │
 ├── domain
@@ -400,18 +426,22 @@ com.ragnarok
     │       └── PlayerMapper.java         # Safe Unboxing (NULL → 0)
     │
     └── persistence
+        ├── AccountEntity.java / Repository        # username, BCrypt password, email
+        ├── CashShopItemEntity.java / Repository   # id, name, cashPrice
         ├── GameMapEntity.java / Repository
         ├── ItemEntity.java / Repository
         ├── MapMonsterEntity.java / Repository     # Spawns with amount (weighted draw)
         ├── MapPortalEntity.java / Repository
+        ├── MarketListingEntity.java / Repository  # seller, item, price, status (ACTIVE/SOLD/CANCELLED)
         ├── MonsterDropEntity.java
         ├── MonsterEntity.java / Repository
-        ├── PlayerEntity.java / Repository
+        ├── PlayerEntity.java / Repository         # accountId FK, cashPoints
         ├── PlayerItemEntity.java / Repository     # UUID PK, is_equipped, amount
         ├── PlayerSkillEntity.java / Repository
         ├── SkillBuffEffectEntity.java / Repository  # stat_type + value_formula per skill
         ├── SkillEntity.java / Repository
         ├── SkillTreeEntity.java / Repository      # findByJobClassesIn (class chain)
+        ├── TradeOfferEntity.java / Repository     # sender, receiver, item, status (PENDING/ACCEPTED/REJECTED/CANCELLED)
         ├── WeaponSizeModifierEntity.java / Repository
         └── mapper
             ├── BuffSerializer.java                # JSON ↔ List<ActiveBuff>
@@ -452,7 +482,11 @@ com.ragnarok
 
 | Entity | Details |
 |---|---|
-| `PlayerEntity` | Flattening: `base_exp`, `job_exp`, `stat_points`, `skill_points`, `map_name`, `active_buffs_json` |
+| `AccountEntity` | `username`, `passwordHash` (BCrypt), `email`; `accountId` FK on `PlayerEntity` |
+| `PlayerEntity` | Flattening: `base_exp`, `job_exp`, `stat_points`, `skill_points`, `map_name`, `active_buffs_json`, `account_id`, `cash_points` |
+| `TradeOfferEntity` | `sender_id`, `receiver_id`, `item_uuid`, `status` (PENDING/ACCEPTED/REJECTED/CANCELLED) |
+| `MarketListingEntity` | `seller_id`, `item_uuid`, `price`, `status` (ACTIVE/SOLD/CANCELLED) |
+| `CashShopItemEntity` | `name`, `item_id` (FK to items), `cash_price` |
 | `MonsterDropEntity` | `rate` as `DOUBLE PRECISION` at 0–100 scale; FK to `monsters` and `items` |
 | `SkillTreeEntity` | Read-only; multiple rows per skill = multiple prerequisites |
 | `SkillBuffEffectEntity` | `skill_id` + `stat_type` + `value_formula` — evaluated at runtime by `ScriptInterpreter` |
@@ -464,7 +498,7 @@ com.ragnarok
 
 ## Test Coverage
 
-**240 tests — 0 failures — BUILD SUCCESS**
+**260+ tests — 0 failures — BUILD SUCCESS**
 
 > Run with Java 17: `JAVA_HOME=/path/to/jdk-17 ./mvnw test`
 > (Java 21+ breaks Mockito inline-mock-maker without additional `--add-opens` configuration)
@@ -551,14 +585,19 @@ com.ragnarok
 - **RathenaImporter local classpath:** reads from `src/main/resources/rathena/` instead of GitHub; threshold checks prevent re-import of already-populated data
 - **PlayerSeedLoader duplicate guard:** fixed from `existsById(1L)` to `existsByName("Hero")` — restarts no longer create duplicate seed players
 - **Antifraude integration:** `FraudClient` calls antifraude microservice; Resilience4j CircuitBreaker with fail-open fallback
+- **Trade System:** `TradeController` + `TradeService` + `TradeOfferEntity` — full P2P offer lifecycle with ownership validation
+- **NPC Shop:** `NpcShopController` + `NpcShopService` — buy/sell at fixed prices with Zenny validation
+- **Cash Shop:** `CashShopController` + `CashShopService` + `CashShopItemEntity` — premium items with `cashPoints` and fraud check
+- **Market:** `MarketController` + `MarketService` + `MarketListingEntity` — player marketplace with Zenny transfers and fraud check on purchase
+- **`BattleResponseDTO` with `monsterHpRemaining`:** battle response now exposes monster HP after attack, enabling front-end to loop attacks until death
+- **`SkillRowResponseDTO` with `targetable`:** skill list now flags offensive skills (`PHYSICAL_DAMAGE`, `MAGICAL_DAMAGE`, `STATUS_EFFECT`) so front-end knows when to send `monsterId`
 
 ### Backlog
 
 #### High Priority
 
-1. **`BattleResponseDTO` — multi-round fields** — add `monsterAlive` + `monsterHpRemaining` to the battle response so the front-end can loop attacks until the monster dies
-2. **Use items in battle** — add "Item" option to combat menu for consumables in inventory
-3. **Missing stat mechanics:**
+1. **Use items in battle** — add "Item" option to combat menu for consumables in inventory
+2. **Missing stat mechanics:**
    - **AGI** → FLEE (evasion) and ASPD (attack speed)
    - **DEX** → HIT (accuracy) and cast time reduction
    - **LUK** → critical rate and drop rate bonus
@@ -566,9 +605,8 @@ com.ragnarok
 
 #### Medium Priority
 
-5. **Map encyclopedia** — neighboring maps, map monsters, drops with rarity
-6. **NPC shop system** — buy/sell with Zenny in cities
-7. **Class change restricted to NPCs** — allow only at specific locations
+4. **Map encyclopedia** — neighboring maps, map monsters, drops with rarity
+5. **Class change restricted to NPCs** — allow only at specific locations
 
 #### Future
 

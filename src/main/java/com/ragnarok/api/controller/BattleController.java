@@ -2,8 +2,10 @@ package com.ragnarok.api.controller;
 
 import com.ragnarok.api.dto.request.AttackRequestDTO;
 import com.ragnarok.api.dto.response.BattleResponseDTO;
+import com.ragnarok.api.dto.response.MapInfoResponseDTO;
 import com.ragnarok.application.service.AccountService;
 import com.ragnarok.application.service.BattleService;
+import com.ragnarok.application.service.MapService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,10 +19,12 @@ public class BattleController {
 
     private final BattleService battleService;
     private final AccountService accountService;
+    private final MapService mapService;
 
-    public BattleController(BattleService battleService, AccountService accountService) {
+    public BattleController(BattleService battleService, AccountService accountService, MapService mapService) {
         this.battleService = battleService;
         this.accountService = accountService;
+        this.mapService = mapService;
     }
 
     @PostMapping("/attack")
@@ -31,6 +35,19 @@ public class BattleController {
             accountService.validateOwnership(accountId, req.playerId());
         }
         BattleService.AttackResult result = battleService.realizarAtaque(req.playerId(), req.monsterId());
-        return ResponseEntity.ok(new BattleResponseDTO(result.message(), result.monsterHpRemaining()));
+
+        MapInfoResponseDTO newMap = null;
+        if (result.playerDied()) {
+            String currentMap = mapService.getCurrentMap(req.playerId());
+            newMap = new MapInfoResponseDTO(currentMap, mapService.getPortals(currentMap));
+        }
+
+        return ResponseEntity.ok(new BattleResponseDTO(
+                result.message(),
+                result.monsterHpRemaining(),
+                result.victory(),
+                result.playerDied(),
+                newMap
+        ));
     }
 }

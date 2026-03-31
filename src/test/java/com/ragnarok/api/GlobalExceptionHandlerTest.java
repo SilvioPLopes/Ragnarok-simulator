@@ -2,6 +2,7 @@ package com.ragnarok.api;
 
 import com.ragnarok.application.service.AccountService;
 import com.ragnarok.application.service.BattleService;
+import com.ragnarok.application.service.MapService;
 import com.ragnarok.api.controller.BattleController;
 import com.ragnarok.api.dto.request.AttackRequestDTO;
 import com.ragnarok.domain.exception.InsufficientSpException;
@@ -32,6 +33,7 @@ class GlobalExceptionHandlerTest {
     @Autowired ObjectMapper objectMapper;
     @MockBean BattleService battleService;
     @MockBean AccountService accountService;
+    @MockBean MapService mapService;
     @MockBean JwtFilter jwtFilter;
 
     @BeforeEach

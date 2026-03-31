@@ -6,5 +6,6 @@ public record SkillRowDTO(
         int maxLevel,
         int currentLevel,
         boolean canLearn,
-        String blockedReason   // null when canLearn = true
+        String blockedReason,  // null when canLearn = true
+        boolean targetable     // true for offensive skills (PHYSICAL_DAMAGE, MAGICAL_DAMAGE, STATUS_EFFECT)
 ) {}

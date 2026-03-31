@@ -53,7 +53,7 @@ public class BattleService {
         this.eventPublisher = eventPublisher;
     }
 
-    public record AttackResult(String message, int monsterHpRemaining) {}
+    public record AttackResult(String message, int monsterHpRemaining, boolean victory, boolean playerDied) {}
 
     @Transactional
     public AttackResult realizarAtaque(Long playerId, Long monsterId) {
@@ -97,7 +97,7 @@ public class BattleService {
             eventPublisher.publishEvent(new MonsterKilledEvent(playerId, monsterId, loot, baseExp, jobExp));
             String dropLog = loot.isEmpty() ? "" :
                     "\nDrop: " + loot.stream().map(Item::getName).collect(Collectors.joining(", "));
-            return new AttackResult("\uD83C\uDF1F VITÓRIA! O " + monster.getName() + " foi derrotado." + dropLog, 0);
+            return new AttackResult("\uD83C\uDF1F VITÓRIA! O " + monster.getName() + " foi derrotado." + dropLog, 0, true, false);
         }
 
 
@@ -115,14 +115,14 @@ public class BattleService {
         if (playerNewHp <= 0) {
             log.info("Player {} morreu para {}.", playerId, monster.getName());
             eventPublisher.publishEvent(new PlayerDiedEvent(playerId));
-            return new AttackResult(String.format("FATAL: Você causou %d de dano, mas o %s contra-atacou com %d e você morreu.", damage, monster.getName(), monsterDamage), newHp);
+            return new AttackResult(String.format("FATAL: Você causou %d de dano, mas o %s contra-atacou com %d e você morreu.", damage, monster.getName(), monsterDamage), newHp, false, true);
         }
 
         String arma = identificarArma(player);
         return new AttackResult(
                 String.format("ATAQUE: Voce causou %d de dano no %s com %s.\n  >> %s contra-atacou e causou %d de dano em voce!",
                         damage, monster.getName(), arma, monster.getName(), monsterDamage),
-                newHp);
+                newHp, false, false);
     }
 
     private String identificarArma(Player p) {

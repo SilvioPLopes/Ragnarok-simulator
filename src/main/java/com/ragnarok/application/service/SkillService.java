@@ -93,8 +93,16 @@ public class SkillService {
                 }
             }
 
+            boolean targetable = skillRepository.findByAegisName(skillId)
+                    .map(s -> {
+                        String et = s.getEffectType();
+                        return et != null && (et.equalsIgnoreCase("PHYSICAL_DAMAGE")
+                                || et.equalsIgnoreCase("MAGICAL_DAMAGE")
+                                || et.equalsIgnoreCase("STATUS_EFFECT"));
+                    })
+                    .orElse(false);
             resultado.add(new SkillRowDTO(skillId, skillId, maxLevel, currentLevel,
-                    blockedReason == null, blockedReason));
+                    blockedReason == null, blockedReason, targetable));
         }
 
         resultado.sort(Comparator.comparing(SkillRowDTO::aegisName));
@@ -117,7 +125,7 @@ public class SkillService {
                         && (tt == null || "SELF".equalsIgnoreCase(tt));
                 if (isUsavel) {
                     resultado.add(new SkillRowDTO(ps.getSkillId(), ps.getSkillId(),
-                            0, ps.getCurrentLevel(), true, null));
+                            0, ps.getCurrentLevel(), true, null, false));
                 }
             });
         }

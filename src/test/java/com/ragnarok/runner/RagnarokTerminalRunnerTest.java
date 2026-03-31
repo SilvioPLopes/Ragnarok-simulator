@@ -75,7 +75,7 @@ class RagnarokTerminalRunnerTest {
         ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
 
         when(battleService.realizarAtaque(anyLong(), anyLong()))
-                .thenReturn("FATAL: Você recebeu dano massivo e morreu.");
+                .thenReturn(new BattleService.AttackResult("FATAL: Você recebeu dano massivo e morreu.", 50, false, true));
         when(playerRepo.findById(1L)).thenReturn(Optional.of(playerMock));
 
         ReflectionTestUtils.invokeMethod(runner, "renderBattleMenu");

@@ -31,10 +31,11 @@ class PlayerServiceTest {
 
     @Test
     @DisplayName("Deve criar um Espadachim nv 1 e salvar atributos planos no banco")
+    @org.springframework.transaction.annotation.Transactional
     void deveCriarSalvarPlayer() {
         // 1. Ação: Criar personagem
-        String nomeHeroi = "Lancelot";
-        Player playerCriado = playerService.criarNovoPersonagem(nomeHeroi, "Swordsman");
+        String nomeHeroi = "Lancelot_" + System.currentTimeMillis();
+        Player playerCriado = playerService.criarNovoPersonagem(nomeHeroi, "Swordsman", null);
 
         // 2. Validação do Retorno (Domínio)
         assertNotNull(playerCriado.getId(), "O ID deve ser gerado pelo banco");

@@ -5,6 +5,7 @@ import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.AttackRequestDTO;
 import com.ragnarok.application.service.AccountService;
 import com.ragnarok.application.service.BattleService;
+import com.ragnarok.application.service.MapService;
 import com.ragnarok.domain.exception.PlayerDeadException;
 import com.ragnarok.infrastructure.security.JwtFilter;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,7 @@ class BattleControllerTest {
     @Autowired ObjectMapper objectMapper;
     @MockBean BattleService battleService;
     @MockBean AccountService accountService;
+    @MockBean MapService mapService;
     @MockBean JwtFilter jwtFilter;
 
     @BeforeEach
@@ -40,7 +42,7 @@ class BattleControllerTest {
 
     @Test
     void attack_returnsMessage() throws Exception {
-        when(battleService.realizarAtaque(1L, 2L)).thenReturn("ATAQUE: causou 45 de dano.");
+        when(battleService.realizarAtaque(1L, 2L)).thenReturn(new BattleService.AttackResult("ATAQUE: causou 45 de dano.", 155, false, false));
 
         mvc.perform(post("/api/battle/attack")
                .contentType(MediaType.APPLICATION_JSON)

@@ -67,7 +67,7 @@ class BattleLootIntegrationTest extends AbstractIntegrationTest {
         // --- 5. AÇÃO: ATAQUE FATAL ---
         System.out.println("4. Executando Ataque Fatal...");
         // O dano do player (Str 99 * 2 = 198) deve ser maior que o HP (10)
-        String log = battleService.realizarAtaque(player.getId(), poring.getId());
+        String log = battleService.realizarAtaque(player.getId(), poring.getId()).message();
 
         System.out.println("LOG: " + log);
 

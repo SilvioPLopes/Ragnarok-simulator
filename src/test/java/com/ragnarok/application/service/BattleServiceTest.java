@@ -157,7 +157,7 @@ class BattleServiceTest {
         when(battleEngine.calculateDamage(playerDomain, monsterDomain)).thenReturn(20);
         when(battleEngine.calculateMonsterDamage(monsterDomain, playerDomain)).thenReturn(5);
 
-        String resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
+        BattleService.AttackResult resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
 
         // HP do monstro deve ter sido decrementado para 180
         assertEquals(180, monsterEntity.getHp());
@@ -165,8 +165,8 @@ class BattleServiceTest {
 
         // Resultado deve conter descrição do ataque
         assertNotNull(resultado);
-        assertTrue(resultado.contains("ATAQUE") || resultado.contains("ataque") || resultado.contains("20"),
-                "Resultado deveria descrever o ataque causado: " + resultado);
+        assertTrue(resultado.message().contains("ATAQUE") || resultado.message().contains("ataque") || resultado.message().contains("20"),
+                "Resultado deveria descrever o ataque causado: " + resultado.message());
     }
 
     // ── Cenário 2: Monstro morto → VITÓRIA e delete ───────────────────────────
@@ -187,14 +187,15 @@ class BattleServiceTest {
         when(battleEngine.calculateDamage(playerDomain, monsterDomain)).thenReturn(20);
         when(battleEngine.calculateLoot(monsterDomain)).thenReturn(new ArrayList<>());
 
-        String resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
+        BattleService.AttackResult resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
 
         // HP do monstro deve chegar a 0
         assertEquals(0, monsterEntity.getHp());
 
         // Resultado deve conter indicação de vitória
         assertNotNull(resultado);
-        String resultadoUpper = resultado.toUpperCase();
+        assertTrue(resultado.victory(), "victory deve ser true quando monstro morre");
+        String resultadoUpper = resultado.message().toUpperCase();
         assertTrue(resultadoUpper.contains("VITORIA") || resultadoUpper.contains("VITÓRIA") || resultadoUpper.contains("VICT"),
                 "Resultado deveria indicar vitória: " + resultado);
 
@@ -248,12 +249,13 @@ class BattleServiceTest {
         // o HP do player não foi alterado pelo ataque; contra-ataque de 50 mata)
         when(battleEngine.calculateMonsterDamage(monsterDomain, playerDomain)).thenReturn(50);
 
-        String resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
+        BattleService.AttackResult resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
 
         assertNotNull(resultado);
-        String resultadoUpper = resultado.toUpperCase();
-        assertTrue(resultadoUpper.contains("FATAL") || resultado.toLowerCase().contains("morreu"),
-                "Resultado deveria indicar morte do player: " + resultado);
+        assertTrue(resultado.playerDied(), "playerDied deve ser true quando player morre");
+        String resultadoUpper = resultado.message().toUpperCase();
+        assertTrue(resultadoUpper.contains("FATAL") || resultado.message().toLowerCase().contains("morreu"),
+                "Resultado deveria indicar morte do player: " + resultado.message());
 
         // HP do player deve ter chegado a 0
         assertEquals(0, playerEntity.getHpCurrent());
@@ -360,17 +362,18 @@ class BattleServiceTest {
         when(battleEngine.calculateDamage(playerDomain, monsterDomain)).thenReturn(20);
         when(battleEngine.calculateLoot(monsterDomain)).thenReturn(List.of(lootItem));
 
-        String resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
+        BattleService.AttackResult resultado = battleService.realizarAtaque(PLAYER_ID, MONSTER_ID);
 
         verify(eventPublisher).publishEvent(argThat((MonsterKilledEvent e) ->
                 e.playerId().equals(PLAYER_ID) &&
                 e.monsterId().equals(MONSTER_ID) &&
                 e.loot().size() == 1 &&
                 e.loot().get(0).getName().equals("Red Herb")));
-        String resultadoUpper = resultado.toUpperCase();
+        assertTrue(resultado.victory(), "victory deve ser true quando monstro morre com loot");
+        String resultadoUpper = resultado.message().toUpperCase();
         assertTrue(resultadoUpper.contains("VITORIA") || resultadoUpper.contains("VITÓRIA")
                         || resultadoUpper.contains("VICT"),
-                "Resultado deveria indicar vitória: " + resultado);
+                "Resultado deveria indicar vitória: " + resultado.message());
     }
 
     // ── Cenário: Monstro morre com loot — MonsterKilledEvent carrega exp ────────

@@ -70,6 +70,7 @@ public class SkillCombatService {
 
     @Transactional
     public String usarSkillEmCombate(Long playerId, String aegisName, Long monsterId) {
+        log.info("[SkillUse] playerId={} skill={} monsterId={}", playerId, aegisName, monsterId);
         SkillEntity skill = skillRepository.findByAegisName(aegisName)
                 .orElseThrow(() -> new SkillNotFoundException(aegisName));
 
@@ -86,6 +87,9 @@ public class SkillCombatService {
         if (spAtual < spCusto) {
             throw new InsufficientSpException(spCusto, spAtual);
         }
+
+        log.info("[SkillUse] skill found: aegis={} effectType={} spCost={} targetType={}",
+                skill.getAegisName(), skill.getEffectType(), spCusto, skill.getTargetType());
 
         if ("PASSIVE".equalsIgnoreCase(skill.getEffectType())) {
             throw new GameException(aegisName + " é uma skill passiva e é aplicada automaticamente.");

@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import com.ragnarok.domain.exception.GameException;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -63,9 +64,9 @@ class AccountServiceTest {
         when(fraudClient.checkLogin(anyLong(), anyString(), anyString(), anyBoolean(), anyBoolean())).thenReturn(decision);
         when(jwtUtil.generateToken(1L)).thenReturn("jwt-token");
 
-        String token = accountService.login("joao", "pass123", "127.0.0.1");
+        AccountService.LoginResult result = accountService.login("joao", "pass123", "127.0.0.1");
 
-        assertEquals("jwt-token", token);
+        assertEquals("jwt-token", result.token());
     }
 
     @Test
@@ -76,7 +77,7 @@ class AccountServiceTest {
         when(accountRepository.findByUsername("joao")).thenReturn(Optional.of(account));
         when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
 
-        assertThrows(IllegalArgumentException.class, () -> accountService.login("joao", "wrong", "127.0.0.1"));
+        assertThrows(GameException.class, () -> accountService.login("joao", "wrong", "127.0.0.1"));
     }
 
     @Test

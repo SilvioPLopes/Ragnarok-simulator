@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.CreatePlayerRequestDTO;
 import com.ragnarok.application.service.AccountService;
+import com.ragnarok.application.service.ClassChangeService;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
@@ -33,6 +34,7 @@ class PlayerControllerTest {
     @Autowired ObjectMapper objectMapper;
     @MockBean PlayerService playerService;
     @MockBean AccountService accountService;
+    @MockBean ClassChangeService classChangeService;
     @MockBean JwtFilter jwtFilter;
 
     @BeforeEach
@@ -43,7 +45,7 @@ class PlayerControllerTest {
 
     @Test
     void getPlayers_returnsEmptyList() throws Exception {
-        when(playerService.listarPersonagens()).thenReturn(List.of());
+        when(playerService.listarPersonagens(any())).thenReturn(List.of());
         mvc.perform(get("/api/players"))
            .andExpect(status().isOk())
            .andExpect(content().json("[]"));
@@ -78,7 +80,7 @@ class PlayerControllerTest {
         Player created = new Player();
         created.setId(1L);
         created.setName("Hero");
-        when(playerService.criarNovoPersonagem("Hero", "NOVICE")).thenReturn(created);
+        when(playerService.criarNovoPersonagem(any(), any(), any())).thenReturn(created);
 
         mvc.perform(post("/api/players")
                .contentType(MediaType.APPLICATION_JSON)

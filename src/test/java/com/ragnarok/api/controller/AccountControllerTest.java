@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragnarok.application.service.AccountService;
 import com.ragnarok.api.dto.request.LoginRequestDTO;
 import com.ragnarok.api.dto.request.RegisterRequestDTO;
+import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.security.JwtUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,7 +49,7 @@ class AccountControllerTest {
 
     @Test
     void login_returns200WithToken() throws Exception {
-        when(accountService.login(eq("joao"), eq("pass"), any())).thenReturn("jwt-token");
+        when(accountService.login(eq("joao"), eq("pass"), any())).thenReturn(new AccountService.LoginResult("jwt-token", 1L));
 
         mockMvc.perform(post("/api/accounts/login")
                 .contentType(MediaType.APPLICATION_JSON)
