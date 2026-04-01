@@ -8,6 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
@@ -22,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 })
 class InventoryDebugTest {
 
-    @MockBean
+    @MockitoBean
     @SuppressWarnings("unused")
     private RagnarokTerminalRunner ragnarokTerminalRunner;
 
@@ -32,6 +33,7 @@ class InventoryDebugTest {
 
     // --- TESTE 1: Validar apenas o Player (Sem itens) ---
     @Test
+    @Transactional
     @DisplayName("Teste 1: Salvar Player isolado (Usa Setters para evitar erro de construtor)")
     void testePlayerIsolado() {
         System.out.println(">>> INICIO TESTE 1: Player <<<");

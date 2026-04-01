@@ -3,6 +3,7 @@
 ![CI](https://github.com/SilvioPLopes/ragnarok-core/actions/workflows/ci.yml/badge.svg)
 ![Coverage](https://img.shields.io/badge/coverage-85%25%2B-brightgreen)
 ![Tests](https://img.shields.io/badge/tests-286%20passing-brightgreen)
+![NPC System](https://img.shields.io/badge/NPC%20System-Operational-brightgreen)
 
 The core engine of a Ragnarok Online emulation and data-management system built on **Hexagonal Architecture (Ports and Adapters)**. All game data (monsters, items, maps, warps, drops, skills) is imported directly from the official **rAthena** server (`db/re/` — Renewal version).
 
@@ -35,6 +36,8 @@ The core engine of a Ragnarok Online emulation and data-management system built 
 | Spring Cache (Caffeine) | Operational | `weaponSizeModifiers`, `skillBuffEffects`, `skillTree`, `playerSkills` — zero repeated queries in battle |
 | REST API + Swagger UI | Operational | Full game loop via browser: Players, Battle, Skills, Inventory, Map, Auth — `GET /swagger-ui.html` |
 | Spring Events | Operational | `BattleService` + `SkillCombatService` publish `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` handles loot, XP, resurrection |
+| NPC System | Operational | Map-aware NPCs (SHOP / HEAL / WARP / NPC types); `NpcSeedLoader` seeds Prontera NPCs from classpath JSON on startup; ownership-guarded buy/heal/warp; Flyway V2 migration |
+| `BattleResponseDTO` | Operational | Exposes `monsterHpRemaining: Integer` — front-end can loop attacks until `monsterHpRemaining == 0` |
 | Testcontainers | Operational | All integration tests use an ephemeral PostgreSQL container — no local DB required for `./mvnw test` |
 | Test Coverage | **286+ tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
 
@@ -65,6 +68,7 @@ The project strictly follows the separation of concerns of hexagonal architectur
 | `ClassChangeService` | Class progression with job level validation |
 | `ItemService` | Inventory management, equip/unequip, auto slot-swap |
 | `MapService` | Current map info, portal listing, walk (random encounter), and travel between maps |
+| `NpcService` | Map-aware NPC interactions: list NPCs by map, show shop catalogue, buy items (Zenny deduction + inventory credit), heal HP/SP, warp to destination |
 | `PlayerService` | Character creation and management |
 | `MonsterCatalogService` | Monster ETL via external API |
 | `WeaponSizeService` | Size modifier lookup by weapon type and monster size (`@Cacheable`) |
@@ -78,10 +82,15 @@ Exposes the full game loop as a REST API with OpenAPI documentation via **spring
 |---|---|
 | `AccountController` | `POST /api/accounts/register`, `POST /api/accounts/login` (returns `{token, accountId}`) |
 | `PlayerController` | `GET /api/players`, `GET /api/players/{id}`, `POST /api/players`, `PUT /{id}/stats`, `POST /{id}/resurrect`, `GET /{id}/class-change`, `POST /{id}/class-change` |
-| `BattleController` | `POST /api/battle/attack` |
+| `BattleController` | `POST /api/battle/attack` — returns `{message, monsterHpRemaining}` |
 | `SkillController` | `GET /api/players/{id}/skills`, `POST .../learn`, `POST .../use` |
 | `ItemController` | `GET /api/players/{id}/inventory`, `POST .../inventory/{itemId}/use`, `POST .../inventory/{itemId}/equip` |
 | `MapController` | `GET /api/players/{id}/map`, `GET /api/maps/{mapId}/portals`, `POST .../walk`, `POST .../travel` |
+| `NpcController` | `GET /api/maps/{mapName}/npcs`, `GET /api/npcs/{npcId}/shop`, `POST /api/npcs/{npcId}/buy`, `POST /api/npcs/{npcId}/heal`, `POST /api/npcs/{npcId}/warp` |
+| `NpcShopController` | `GET /api/shop/npc/items`, `POST /api/shop/npc/buy`, `POST /api/shop/npc/sell` (generic shop, no map awareness) |
+| `MarketController` | `GET/POST /api/market/listings`, `POST .../listings/{id}/buy`, `POST .../listings/{id}/cancel` |
+| `TradeController` | `POST /api/trade/offers`, `GET .../received/{playerId}`, `GET .../sent/{playerId}`, `POST .../offers/{id}/accept`, `POST .../offers/{id}/reject`, `POST .../offers/{id}/cancel` |
+| `CashShopController` | `GET /api/shop/cash/items`, `POST /api/shop/cash/buy` |
 | `GlobalExceptionHandler` | `@RestControllerAdvice`: maps domain exceptions to HTTP 400/404/500 |
 
 **Swagger UI:** `http://localhost:8080/swagger-ui.html` — interactive docs for all groups without cloning the repo.
@@ -104,6 +113,7 @@ Exposes the full game loop as a REST API with OpenAPI documentation via **spring
 | `RathenaImporter` | `@Order(1)` | Imports monsters and items from **local classpath** YAML files (`src/main/resources/rathena/`); threshold check: ≥2600 monsters / ≥25000 items before skipping re-import |
 | `PlayerSeedLoader` | `@Order(2)` | Creates the initial player |
 | `StartupDataLoader` | `@Order(3)` | Populates `maps`, `map_portals`, `map_monsters`, `monster_drops`, `skills`, `skill_tree`, `skill_buff_effects`, and `weapon_size_modifiers` from SQLs in `src/main/resources/db/` |
+| `NpcSeedLoader` | `@Order(4)` | Seeds map-aware NPCs from `src/main/resources/prontera_npcs_seed.json`; idempotent — skips rows whose `seed_id` already exists; populates `npcs`, `npc_shop_items`, and `npc_warp_destinations` |
 | `RagnarokTerminalRunner` | — | Terminal UI, exploration and combat game loop |
 
 ---
@@ -198,7 +208,44 @@ realizarAtaque()
 | `PlayerDiedEvent` | `playerId` | `BattleService` | `BattleEventHandler.onPlayerDied` |
 | `PlayerLeveledUpEvent` | `playerId`, `newBaseLevel`, `newJobLevel` | `BattleEventHandler` | — (logged) |
 
-### 9. Safety & Resilience (Null Safety)
+### 9. NPC Interaction Flow (map-aware NPCs)
+
+```
+GET /api/maps/{mapName}/npcs
+  └─ NpcController → NpcService.getNpcsForMap(mapName)
+       └─ npcRepository.findByMapName(mapName)
+            └─ List<NpcResponseDTO> {id, name, type, x, y, spriteRef}
+
+POST /api/npcs/{npcId}/buy  {playerId, itemId, amount}
+  └─ NpcController validates ownership (accountId from JWT)
+       └─ NpcService.buyFromNpc(npcId, playerId, itemId, amount)
+            ├─ validates NPC type == SHOP
+            ├─ resolves price (shopItem.price or items.price if price == -1)
+            ├─ checks player.zenny >= total
+            ├─ deducts zenny, upserts player_items (stack if item already owned)
+            └─ NpcBuyResponseDTO {message, itemName, remainingZenny}
+
+POST /api/npcs/{npcId}/heal  {playerId}
+  └─ NpcController validates ownership
+       └─ NpcService.heal(npcId, playerId)
+            ├─ validates NPC type == HEAL
+            ├─ player.hpCurrent = player.hpMax, player.spCurrent = player.spMax
+            └─ NpcHealResponseDTO {message, hpCurrent, spCurrent}
+
+POST /api/npcs/{npcId}/warp  {playerId, destination}
+  └─ NpcController validates ownership
+       └─ NpcService.warp(npcId, playerId, destination)
+            ├─ validates NPC type == WARP
+            ├─ looks up npc_warp_destinations by (npcId, destination)
+            ├─ player.mapName = dest.mapName, player.coordX/Y = dest.x/y
+            └─ NpcWarpResponseDTO {mapName, x, y}
+```
+
+**NPC types:** `SHOP` (buy items with Zenny), `HEAL` (restore HP + SP fully), `WARP` (teleport to map destination), `NPC` (informational/generic — no interaction yet).
+
+**Seed file:** `src/main/resources/prontera_npcs_seed.json` — curated Prontera NPCs (Kafra employees, Warp Guards, item shops) loaded by `NpcSeedLoader` at `@Order(4)`. Each entry has a stable `seed_id` for idempotency.
+
+### 10. Safety & Resilience (Null Safety)
 
 1. **Shielded Mapper:** `PlayerMapper` implements Safe Unboxing — `NULL` in numeric fields (XP, Points, Zenny) is converted to `0` before instantiating the Domain, preventing `NullPointerException`
 2. **Safe Drop Rate:** `MonsterMapper.mapDrop` treats `rate = null` as `0.0` — item never drops accidentally
@@ -211,7 +258,12 @@ realizarAtaque()
 **URL:** `jdbc:postgresql://localhost:5432/ragnarok_db`
 **User:** `postgres` / **Password:** *(environment variable `DB_PASS`, local default: `postgre`)*
 
-Schema is managed by **Flyway** (`db/migration/V1__initial_schema.sql`). Hibernate validates on startup.
+Schema is managed by **Flyway** (`db/migration/`). Hibernate validates on startup.
+
+| Migration | File | Description |
+|---|---|---|
+| V1 | `V1__initial_schema.sql` | All core tables (players, monsters, items, maps, skills, inventory, market, trade, shop) |
+| V2 | `V2__npc_tables.sql` | NPC system: `npcs`, `npc_shop_items`, `npc_warp_destinations` |
 
 | Table | Source | Description |
 |---|---|---|
@@ -228,6 +280,9 @@ Schema is managed by **Flyway** (`db/migration/V1__initial_schema.sql`). Hiberna
 | `skill_buff_effects` | `skill_effects.sql` | Buff/passive effects per skill: `stat_type`, `value_formula` |
 | `player_skills` | JPA (test) / Flyway (prod) | Learned skills: `player_id`, `skill_id`, `current_level` |
 | `weapon_size_modifiers` | `weapon_size_modifiers.sql` | Damage modifiers: `weapon_type`, `small_pct`, `medium_pct`, `large_pct` |
+| `npcs` | NpcSeedLoader (startup) | Map-aware NPCs: `seed_id` (idempotency key), `name`, `type`, `x`, `y`, `map_name`, `sprite_ref` |
+| `npc_shop_items` | NpcSeedLoader (startup) | Items sold per NPC shop: `npc_id` FK, `item_id`, `item_name`, `price` (`-1` = resolved from `items.price`) |
+| `npc_warp_destinations` | NpcSeedLoader (startup) | Warp targets per NPC: `npc_id` FK, `map_name`, `x`, `y` |
 
 ### Resetting database data
 
@@ -328,14 +383,24 @@ com.ragnarok
 ├── api
 │   ├── GlobalExceptionHandler.java       # @RestControllerAdvice — maps exceptions to HTTP codes
 │   ├── controller
-│   │   ├── BattleController.java         # POST /api/battle/attack
+│   │   ├── AccountController.java        # POST /api/accounts/register, /login
+│   │   ├── BattleController.java         # POST /api/battle/attack → {message, monsterHpRemaining}
+│   │   ├── CashShopController.java       # GET/POST /api/shop/cash
 │   │   ├── ItemController.java           # GET/POST /api/players/{id}/inventory
 │   │   ├── MapController.java            # GET/POST /api/players/{id}/map
-│   │   ├── PlayerController.java         # GET/POST /api/players
-│   │   └── SkillController.java          # GET/POST /api/players/{id}/skills
+│   │   ├── MarketController.java         # GET/POST /api/market/listings
+│   │   ├── NpcController.java            # GET /api/maps/{mapName}/npcs, GET/POST /api/npcs/{npcId}/*
+│   │   ├── NpcShopController.java        # GET/POST /api/shop/npc (generic, no map awareness)
+│   │   ├── PlayerController.java         # GET/POST/PUT /api/players
+│   │   ├── SkillController.java          # GET/POST /api/players/{id}/skills
+│   │   └── TradeController.java          # GET/POST /api/trade/offers
 │   └── dto
-│       ├── request/                      # AttackRequestDTO, CreatePlayerRequestDTO, TravelRequestDTO, UseSkillRequestDTO
-│       └── response/                     # PlayerResponseDTO, BattleResponseDTO, SkillRowResponseDTO,
+│       ├── request/                      # AttackRequestDTO, CreatePlayerRequestDTO, TravelRequestDTO,
+│       │                                 # UseSkillRequestDTO, NpcBuyFromNpcRequestDTO, NpcHealRequestDTO,
+│       │                                 # NpcWarpRequestDTO, UpdateStatsRequestDTO, ...
+│       └── response/                     # PlayerResponseDTO, BattleResponseDTO {message, monsterHpRemaining},
+│                                         # NpcResponseDTO, NpcShopResponseDTO, NpcBuyResponseDTO,
+│                                         # NpcHealResponseDTO, NpcWarpResponseDTO, SkillRowResponseDTO,
 │                                         # InventoryItemResponseDTO, MapInfoResponseDTO, WalkResponseDTO
 │
 ├── application
@@ -346,6 +411,7 @@ com.ragnarok
 │       ├── BattleEventHandler.java       # @EventListener: loot persistence, XP, resurrection
 │       ├── BattleService.java            # Combat turn; publishes MonsterKilledEvent / PlayerDiedEvent
 │       ├── ClassChangeService.java       # Class progression
+│       ├── NpcService.java               # Map-aware NPC interactions: shop/heal/warp with ownership guard
 │       ├── ItemService.java              # Inventory, equip, auto-swap
 │       ├── MapService.java               # Current map, portals, walk, travel
 │       ├── MonsterCatalogService.java    # Monster ETL via external API
@@ -406,6 +472,10 @@ com.ragnarok
         ├── MapPortalEntity.java / Repository
         ├── MonsterDropEntity.java
         ├── MonsterEntity.java / Repository
+        ├── NpcEntity.java / Repository            # seed_id, name, type, x, y, map_name, sprite_ref
+        ├── NpcShopItemEntity.java / Repository    # per-NPC shop catalogue
+        ├── NpcType.java                           # Enum: SHOP, HEAL, WARP, NPC
+        ├── NpcWarpDestinationEntity.java / Repository  # per-NPC warp destinations
         ├── PlayerEntity.java / Repository
         ├── PlayerItemEntity.java / Repository     # UUID PK, is_equipped, amount
         ├── PlayerSkillEntity.java / Repository
@@ -459,6 +529,9 @@ com.ragnarok
 | `WeaponSizeModifierEntity` | `weapon_type` + `small_pct` + `medium_pct` + `large_pct` |
 | `PlayerItemEntity` | UUID PK, allows multiple instances of the same item (e.g., two katanas with different refine levels) |
 | `MapMonsterEntity` | `map_id` + `monster_id` + `amount` — weighted draw by `amount` |
+| `NpcEntity` | `seed_id` (unique idempotency key), `name`, `NpcType`, `x`, `y`, `map_name`, `sprite_ref`; owns `shopItems` and `warpDestinations` via `@OneToMany(cascade = ALL)` |
+| `NpcShopItemEntity` | FK to `npcs`; `item_id`, `item_name`, `price` (`-1` = dynamic price from `items.price`) |
+| `NpcWarpDestinationEntity` | FK to `npcs`; `map_name`, `x`, `y` — validated on every warp call |
 
 ---
 
@@ -564,24 +637,25 @@ com.ragnarok
 - **PlayerSeedLoader duplicate guard:** fixed from `existsById(1L)` to `existsByName("Hero")` — restarts no longer create duplicate seed players
 - **Antifraude integration:** `FraudClient` calls antifraude microservice; Resilience4j CircuitBreaker with fail-open fallback
 - **Suíte de testes green (286 testes):** corrigidos 7 erros de compilação (`BattleService.AttackResult` record em vez de `String` nos mocks), `PlayerControllerTest` completado com `@MockitoBean ClassChangeService`, `AccountServiceTest` corrigido para `GameException` nas credenciais inválidas, `PlayerServiceTest` com `@Transactional` + cleanup de dados de teste, `MonsterCatalogServiceTest` com DELETE em `map_monsters` antes de `monsters`, `RagnarokTerminalRunner` corrigido para usar `.message()` no retorno de `realizarAtaque`
+- **`BattleResponseDTO.monsterHpRemaining`** — `POST /api/battle/attack` now returns `{message, monsterHpRemaining: Integer}`; front-end can loop attacks until `monsterHpRemaining == 0` without polling
+- **NPC system (Alt-6.2):** `NpcEntity`, `NpcShopItemEntity`, `NpcWarpDestinationEntity`; `NpcType` enum (SHOP, HEAL, WARP, NPC); `NpcService` with Zenny-validated buy, full HP/SP heal, and map-aware warp; `NpcController` at `/api/maps/{mapName}/npcs` and `/api/npcs/{npcId}/*` with JWT ownership guard on all mutation endpoints; `NpcSeedLoader` (`@Order(4)`) seeds `prontera_npcs_seed.json` idempotently on startup; Flyway V2 migration adds 3 new tables
 
 ### Backlog
 
 #### High Priority
 
-1. **`BattleResponseDTO` — multi-round fields** — add `monsterAlive` + `monsterHpRemaining` to the battle response so the front-end can loop attacks until the monster dies
-2. **Use items in battle** — add "Item" option to combat menu for consumables in inventory
-3. **Missing stat mechanics:**
+1. **Use items in battle** — add "Item" option to combat menu for consumables in inventory
+2. **Missing stat mechanics:**
    - **AGI** → FLEE (evasion) and ASPD (attack speed)
    - **DEX** → HIT (accuracy) and cast time reduction
    - **LUK** → critical rate and drop rate bonus
-4. **Butterfly Wing / Fly Wing** — teleport to Prontera / random map point
+3. **Butterfly Wing / Fly Wing** — teleport to Prontera / random map point
 
 #### Medium Priority
 
-5. **Map encyclopedia** — neighboring maps, map monsters, drops with rarity
-6. **NPC shop system** — buy/sell with Zenny in cities
-7. **Class change restricted to NPCs** — allow only at specific locations
+4. **Map encyclopedia** — neighboring maps, map monsters, drops with rarity
+5. **Class change restricted to NPCs** — allow only at specific NPC locations
+6. **NPC `NPC` type interaction** — dialogue and quest hooks for generic NPCs (type already seeded, no service logic yet)
 
 #### Future
 
@@ -624,7 +698,7 @@ JwtUtilTest,ClassChangeLoggingTest,ParserLoggingTest"
 - **Docker Desktop** (for `./mvnw test` — Testcontainers starts a `postgres:16` container automatically)
 - Environment variable `DB_PASS` with the PostgreSQL password (local default: `postgre`)
 
-> On the first startup, `RathenaImporter` downloads data from rAthena via GitHub (~2675 monsters + all items). `StartupDataLoader` populates the rest. The application is ready in ~30–60 seconds depending on connection speed.
+> On the first startup, `RathenaImporter` reads monster and item data from local classpath YAML files (no network required). `StartupDataLoader` populates static tables, then `NpcSeedLoader` seeds Prontera NPCs. The application is ready in seconds.
 
 ### REST API / Swagger UI
 
@@ -632,12 +706,19 @@ Once the application is running, open **`http://localhost:8080/swagger-ui.html`*
 
 Recommended flow:
 ```
-1. POST /api/players          — {"name":"Hero","jobClass":"NOVICE"}  → note the returned "id"
-2. GET  /api/players/{id}     — verify HP, level, zenny
-3. POST /api/players/{id}/map/walk  → if encounterOccurred=true, note monsterId
-4. POST /api/battle/attack    — {"playerId":1,"monsterId":1002}  → repeat until VITÓRIA
-5. GET  /api/players/{id}/inventory — verify dropped items
-6. GET  /api/players/{id}/skills    — list learnable skills
-7. POST /api/players/{id}/skills/NV_BASIC/learn
-8. POST /api/players/{id}/map/travel — {"destination":"izlude"}
+1.  POST /api/accounts/register  — {"username":"hero","password":"pass","email":"a@b.com"}
+2.  POST /api/accounts/login     — {"username":"hero","password":"pass"}  → save token
+3.  POST /api/players            — {"name":"Hero","jobClass":"NOVICE"}    → note playerId
+4.  GET  /api/players/{id}       — verify HP, level, zenny
+5.  GET  /api/maps/prontera/npcs — list all NPCs in Prontera (includes Kafra + shops + warps)
+6.  POST /api/npcs/{npcId}/heal  — {"playerId":1}  → restore HP and SP via Kafra
+7.  POST /api/players/{id}/map/walk     → if encounterOccurred=true, note monsterId
+8.  POST /api/battle/attack      — {"playerId":1,"monsterId":1002}
+                                   → repeat until monsterHpRemaining == 0 (VITÓRIA)
+9.  GET  /api/players/{id}/inventory    — verify dropped items
+10. GET  /api/players/{id}/skills       — list learnable skills
+11. POST /api/players/{id}/skills/NV_BASIC/learn
+12. POST /api/npcs/{npcId}/warp  — {"playerId":1,"destination":"izlude"}  → teleport via warp NPC
+13. GET  /api/npcs/{npcId}/shop  — browse NPC shop catalogue
+14. POST /api/npcs/{npcId}/buy   — {"playerId":1,"itemId":501,"amount":5}  → buy from NPC
 ```
