@@ -48,7 +48,7 @@ public class NpcService {
         List<NpcShopResponseDTO.ShopItemDTO> dtos = items.stream()
                 .map(si -> {
                     int price = si.getPrice() == -1 ? resolveItemPrice(si.getItemId()) : si.getPrice();
-                    return new NpcShopResponseDTO.ShopItemDTO(si.getItemId(), si.getItemName(), price);
+                    return new NpcShopResponseDTO.ShopItemDTO(si.getItemId(), resolveItemName(si.getItemId()), price);
                 })
                 .toList();
         return new NpcShopResponseDTO(npc.getName(), dtos);
@@ -89,7 +89,7 @@ public class NpcService {
             playerItemRepository.save(pi);
         }
 
-        return new NpcBuyResponseDTO("Compra realizada com sucesso", shopItem.getItemName(), player.getZenny());
+        return new NpcBuyResponseDTO("Compra realizada com sucesso", resolveItemName(itemId), player.getZenny());
     }
 
     @Transactional
@@ -137,5 +137,11 @@ public class NpcService {
         return itemRepository.findById(itemId)
                 .map(item -> item.getPrice() != null ? item.getPrice() : 0)
                 .orElse(0);
+    }
+
+    private String resolveItemName(Long itemId) {
+        return itemRepository.findById(itemId)
+                .map(ItemEntity::getName)
+                .orElse("Unknown");
     }
 }
