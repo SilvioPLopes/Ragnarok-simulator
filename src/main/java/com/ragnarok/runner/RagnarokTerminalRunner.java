@@ -500,7 +500,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
         String input = scanner.nextLine();
         if ("1".equals(input)) {
-            String resultado = battleService.realizarAtaque(currentPlayer.getId(), currentMonster.getId());
+            String resultado = battleService.realizarAtaque(currentPlayer.getId(), currentMonster.getId()).message();
             System.out.println("------------------------------------------------");
             System.out.println(resultado);
 
@@ -561,6 +561,11 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
         try {
             String resultado = skillCombatService.usarSkillEmCombate(currentPlayer.getId(), aegisName, currentMonster.getId());
             System.out.println(">>> " + resultado);
+            monsterRepo.findById(currentMonster.getId()).ifPresent(m -> currentMonster = m);
+            if (resultado.contains("VITÓRIA") || resultado.contains("VITORIA")) {
+                inBattle = false;
+                currentMonster = null;
+            }
         } catch (GameException e) {
             System.out.println(">>> " + e.getMessage());
         }

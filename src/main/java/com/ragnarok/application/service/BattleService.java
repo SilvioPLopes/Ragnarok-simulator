@@ -53,8 +53,11 @@ public class BattleService {
         this.eventPublisher = eventPublisher;
     }
 
+
+    public record AttackResult(String message, int monsterHpRemaining) {}
+
     @Transactional
-    public String realizarAtaque(Long playerId, Long monsterId) {
+    public AttackResult realizarAtaque(Long playerId, Long monsterId) {
         // 1. Carregar Dados
         PlayerEntity playerEntity = playerRepository.findById(playerId)
                 .orElseThrow(() -> new IllegalArgumentException("Player not found"));
@@ -95,7 +98,7 @@ public class BattleService {
             eventPublisher.publishEvent(new MonsterKilledEvent(playerId, monsterId, loot, baseExp, jobExp));
             String dropLog = loot.isEmpty() ? "" :
                     "\nDrop: " + loot.stream().map(Item::getName).collect(Collectors.joining(", "));
-            return "\uD83C\uDF1F VITÓRIA! O " + monster.getName() + " foi derrotado." + dropLog;
+            return new AttackResult("\uD83C\uDF1F VITÓRIA! O " + monster.getName() + " foi derrotado." + dropLog, 0);
         }
 
 
@@ -113,12 +116,14 @@ public class BattleService {
         if (playerNewHp <= 0) {
             log.info("Player {} morreu para {}.", playerId, monster.getName());
             eventPublisher.publishEvent(new PlayerDiedEvent(playerId));
-            return String.format("FATAL: Você causou %d de dano, mas o %s contra-atacou com %d e você morreu.", damage, monster.getName(), monsterDamage);
+            return new AttackResult(String.format("FATAL: Você causou %d de dano, mas o %s contra-atacou com %d e você morreu.", damage, monster.getName(), monsterDamage), newHp);
         }
 
         String arma = identificarArma(player);
-        return String.format("ATAQUE: Voce causou %d de dano no %s com %s. (HP restante: %d)\n  >> %s contra-atacou e causou %d de dano em voce!",
-                damage, monster.getName(), arma, newHp, monster.getName(), monsterDamage);
+        return new AttackResult(
+                String.format("ATAQUE: Voce causou %d de dano no %s com %s.\n  >> %s contra-atacou e causou %d de dano em voce!",
+                        damage, monster.getName(), arma, monster.getName(), monsterDamage),
+                newHp);
     }
 
     private String identificarArma(Player p) {

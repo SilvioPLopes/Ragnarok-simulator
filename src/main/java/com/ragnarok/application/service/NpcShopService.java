@@ -1,0 +1,80 @@
+package com.ragnarok.application.service;
+
+import com.ragnarok.infrastructure.persistence.*;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class NpcShopService {
+
+    private final ItemRepository itemRepository;
+    private final PlayerRepository playerRepository;
+    private final PlayerItemRepository playerItemRepository;
+
+    public NpcShopService(ItemRepository itemRepository,
+                          PlayerRepository playerRepository,
+                          PlayerItemRepository playerItemRepository) {
+        this.itemRepository = itemRepository;
+        this.playerRepository = playerRepository;
+        this.playerItemRepository = playerItemRepository;
+    }
+
+    public List<ItemEntity> listItems() {
+        return itemRepository.findAll();
+    }
+
+    @Transactional
+    public void buy(Long playerId, Long itemId, int quantity) {
+        ItemEntity item = itemRepository.findById(itemId)
+                .orElseThrow(() -> new IllegalArgumentException("Item nao encontrado: " + itemId));
+        PlayerEntity player = playerRepository.findById(playerId)
+                .orElseThrow(() -> new IllegalArgumentException("Player nao encontrado"));
+
+        long total = (long) item.getPrice() * quantity;
+        if (player.getZenny() < total) {
+            throw new IllegalStateException("Zenny insuficiente");
+        }
+        player.setZenny(player.getZenny() - total);
+        playerRepository.save(player);
+
+        List<PlayerItemEntity> existing = playerItemRepository.findByPlayerIdAndItemId(playerId, itemId);
+        if (!existing.isEmpty()) {
+            PlayerItemEntity stack = existing.get(0);
+            stack.setAmount(stack.getAmount() + quantity);
+            playerItemRepository.save(stack);
+        } else {
+            PlayerItemEntity pi = new PlayerItemEntity();
+            pi.setPlayer(player);
+            pi.setItem(item);
+            pi.setAmount(quantity);
+            pi.setEquipped(false);
+            playerItemRepository.save(pi);
+        }
+    }
+
+    @Transactional
+    public void sell(Long playerId, UUID playerItemId, int quantity) {
+        PlayerItemEntity pi = playerItemRepository.findById(playerItemId)
+                .orElseThrow(() -> new IllegalArgumentException("Item nao encontrado no inventario"));
+        if (!pi.getPlayer().getId().equals(playerId)) {
+            throw new IllegalArgumentException("Item nao pertence a este jogador");
+        }
+        if (pi.getAmount() < quantity) {
+            throw new IllegalStateException("Quantidade insuficiente no inventario");
+        }
+        long credit = (long) pi.getItem().getPrice() * quantity / 2;
+        PlayerEntity player = pi.getPlayer();
+        player.setZenny(player.getZenny() + credit);
+
+        if (pi.getAmount() == quantity) {
+            playerItemRepository.delete(pi);
+        } else {
+            pi.setAmount(pi.getAmount() - quantity);
+            playerItemRepository.save(pi);
+        }
+        playerRepository.save(player);
+    }
+}

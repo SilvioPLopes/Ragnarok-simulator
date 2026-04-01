@@ -10,7 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import org.junit.jupiter.api.BeforeEach;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 class PlayerServiceTest {
 
-    @MockBean
+    @MockitoBean
     @SuppressWarnings("unused")
     private RagnarokTerminalRunner ragnarokTerminalRunner;
 
@@ -29,13 +31,21 @@ class PlayerServiceTest {
     @Autowired
     private PlayerRepository playerRepository;
 
+    @BeforeEach
+    void cleanupTestData() {
+        playerRepository.findAll().stream()
+                .filter(p -> "Lancelot".equals(p.getName()))
+                .forEach(playerRepository::delete);
+    }
+
     @Test
     @DisplayName("Deve criar um Espadachim nv 1 e salvar atributos planos no banco")
+    @org.springframework.transaction.annotation.Transactional
     void deveCriarSalvarPlayer() {
         // 1. Ação: Criar personagem
         String nomeHeroi = "Lancelot";
-        Player playerCriado = playerService.criarNovoPersonagem(nomeHeroi, "Swordsman");
-
+        Long accountIdMock = 1L;
+        Player playerCriado = playerService.criarNovoPersonagem(nomeHeroi, "Swordsman", accountIdMock);
         // 2. Validação do Retorno (Domínio)
         assertNotNull(playerCriado.getId(), "O ID deve ser gerado pelo banco");
         assertEquals(1, playerCriado.getBaseLevel());

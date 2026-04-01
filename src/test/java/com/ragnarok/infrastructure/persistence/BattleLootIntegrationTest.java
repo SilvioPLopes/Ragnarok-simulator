@@ -67,9 +67,9 @@ class BattleLootIntegrationTest extends AbstractIntegrationTest {
         // --- 5. AÇÃO: ATAQUE FATAL ---
         System.out.println("4. Executando Ataque Fatal...");
         // O dano do player (Str 99 * 2 = 198) deve ser maior que o HP (10)
-        String log = battleService.realizarAtaque(player.getId(), poring.getId());
+        BattleService.AttackResult log = battleService.realizarAtaque(player.getId(), poring.getId());
 
-        System.out.println("LOG: " + log);
+        System.out.println("LOG: " + log.message());
 
         // --- 6. VALIDAÇÕES ---
 
@@ -78,8 +78,8 @@ class BattleLootIntegrationTest extends AbstractIntegrationTest {
         assertEquals(0, monstroMorto.getHp(), "O monstro deveria estar com 0 HP.");
 
         // B. Verifica se o Log informou a vitória e o drop
-        assertTrue(log.contains("VITÓRIA") || log.contains("VITORIA"), "Log deve confirmar a vitória.");
-        assertTrue(log.contains("Poring Card"), "Log deve confirmar o drop.");
+        assertTrue(log.message().contains("VITÓRIA") || log.message().contains("VITORIA"), "Log deve confirmar a vitória.");
+        assertTrue(log.message().contains("Poring Card"), "Log deve confirmar o drop.");
 
         // C. VERIFICAÇÃO FINAL: O Item está no inventário do Player?
         List<PlayerItemEntity> inventario = playerItemRepository.findByPlayerId(player.getId());

@@ -3,16 +3,22 @@ package com.ragnarok.api.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.AttackRequestDTO;
+import com.ragnarok.application.service.AccountService;
 import com.ragnarok.application.service.BattleService;
 import com.ragnarok.domain.exception.PlayerDeadException;
+import com.ragnarok.infrastructure.security.JwtFilter;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -23,12 +29,20 @@ class BattleControllerTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
-    @MockBean BattleService battleService;
+    @MockitoBean BattleService battleService;
+    @MockitoBean AccountService accountService;
+    @MockitoBean JwtFilter jwtFilter;
+
+    @BeforeEach
+    void passFilterThrough() throws Exception {
+        doAnswer(inv -> { ((jakarta.servlet.FilterChain) inv.getArgument(2)).doFilter(inv.getArgument(0), inv.getArgument(1)); return null; })
+                .when(jwtFilter).doFilter(any(), any(), any());
+    }
 
     @Test
     void attack_returnsMessage() throws Exception {
-        when(battleService.realizarAtaque(1L, 2L)).thenReturn("ATAQUE: causou 45 de dano.");
-
+        BattleService.AttackResult mockResult = new BattleService.AttackResult("ATAQUE: causou 45 de dano.", 0);
+        when(battleService.realizarAtaque(1L, 2L)).thenReturn(mockResult);
         mvc.perform(post("/api/battle/attack")
                .contentType(MediaType.APPLICATION_JSON)
                .content(objectMapper.writeValueAsString(new AttackRequestDTO(1L, 2L))))

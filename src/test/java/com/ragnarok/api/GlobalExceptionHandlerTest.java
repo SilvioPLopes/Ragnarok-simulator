@@ -1,5 +1,6 @@
 package com.ragnarok.api;
 
+import com.ragnarok.application.service.AccountService;
 import com.ragnarok.application.service.BattleService;
 import com.ragnarok.api.controller.BattleController;
 import com.ragnarok.api.dto.request.AttackRequestDTO;
@@ -7,6 +8,8 @@ import com.ragnarok.domain.exception.InsufficientSpException;
 import com.ragnarok.domain.exception.PlayerDeadException;
 import com.ragnarok.domain.exception.SkillNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragnarok.infrastructure.security.JwtFilter;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -15,6 +18,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -26,6 +31,14 @@ class GlobalExceptionHandlerTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
     @MockBean BattleService battleService;
+    @MockBean AccountService accountService;
+    @MockBean JwtFilter jwtFilter;
+
+    @BeforeEach
+    void passFilterThrough() throws Exception {
+        doAnswer(inv -> { ((jakarta.servlet.FilterChain) inv.getArgument(2)).doFilter(inv.getArgument(0), inv.getArgument(1)); return null; })
+                .when(jwtFilter).doFilter(any(), any(), any());
+    }
 
     @Test
     void playerDeadException_returns400WithErrorField() throws Exception {
