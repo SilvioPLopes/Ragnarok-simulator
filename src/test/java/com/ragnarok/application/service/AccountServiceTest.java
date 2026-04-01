@@ -1,5 +1,6 @@
 package com.ragnarok.application.service;
 
+import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.antifraude.FraudClient;
 import com.ragnarok.infrastructure.persistence.*;
 import com.ragnarok.infrastructure.security.JwtUtil;
@@ -63,10 +64,8 @@ class AccountServiceTest {
         when(fraudClient.checkLogin(anyLong(), anyString(), anyString(), anyBoolean(), anyBoolean())).thenReturn(decision);
         when(jwtUtil.generateToken(1L)).thenReturn("jwt-token");
 
-        String token = accountService.login("joao", "pass123", "127.0.0.1");
-
-        assertEquals("jwt-token", token);
-    }
+        AccountService.LoginResult resultado = accountService.login("joao", "pass123", "127.0.0.1");
+        assertEquals("jwt-token", resultado.token());    }
 
     @Test
     void login_wrongPassword_throws() {
@@ -76,7 +75,7 @@ class AccountServiceTest {
         when(accountRepository.findByUsername("joao")).thenReturn(Optional.of(account));
         when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
 
-        assertThrows(IllegalArgumentException.class, () -> accountService.login("joao", "wrong", "127.0.0.1"));
+        assertThrows(GameException.class, () -> accountService.login("joao", "wrong", "127.0.0.1"));
     }
 
     @Test

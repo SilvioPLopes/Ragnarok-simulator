@@ -50,6 +50,7 @@ class MonsterCatalogServiceTest {
     @BeforeEach
     void limparDadosDeTeste() {
         jdbcTemplate.update("DELETE FROM monster_drops WHERE monster_id = ?", MONSTER_ID);
+        jdbcTemplate.update("DELETE FROM map_monsters WHERE monster_id = ?", MONSTER_ID);
         jdbcTemplate.update("DELETE FROM monsters WHERE id = ?", MONSTER_ID);
     }
 

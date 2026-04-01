@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.stubbing.OngoingStubbing;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
@@ -71,12 +72,14 @@ class RagnarokTerminalRunnerTest {
     @Test
     @DisplayName("Runner: Deve resetar estado de batalha ao receber FATAL do serviço")
     void deveRessuscitarJogadorAposMorte() {
+        BattleService.AttackResult mockResult = new BattleService.AttackResult("FATAL: Você recebeu dano massivo e morreu.", 0);
         System.setIn(new ByteArrayInputStream("1\n".getBytes()));
         ReflectionTestUtils.setField(runner, "scanner", new Scanner(System.in));
 
-        when(battleService.realizarAtaque(anyLong(), anyLong()))
-                .thenReturn("FATAL: Você recebeu dano massivo e morreu.");
         when(playerRepo.findById(1L)).thenReturn(Optional.of(playerMock));
+        OngoingStubbing<BattleService.AttackResult> attackResultOngoingStubbing =
+                when(battleService.realizarAtaque(anyLong(), anyLong()))
+                        .thenReturn(mockResult);
 
         ReflectionTestUtils.invokeMethod(runner, "renderBattleMenu");
 

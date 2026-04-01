@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -22,8 +23,8 @@ class AccountControllerTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
-    @MockBean AccountService accountService;
-    @MockBean JwtUtil jwtUtil;
+    @MockitoBean AccountService accountService;
+    @MockitoBean JwtUtil jwtUtil;
 
     @Test
     void register_returns201() throws Exception {
@@ -48,8 +49,9 @@ class AccountControllerTest {
 
     @Test
     void login_returns200WithToken() throws Exception {
-        when(accountService.login(eq("joao"), eq("pass"), any())).thenReturn("jwt-token");
 
+        AccountService.LoginResult mockResult = new AccountService.LoginResult("jwt-token", 1L);
+        when(accountService.login(eq("joao"), eq("pass"), any())).thenReturn(mockResult);
         mockMvc.perform(post("/api/accounts/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(new LoginRequestDTO("joao", "pass"))))

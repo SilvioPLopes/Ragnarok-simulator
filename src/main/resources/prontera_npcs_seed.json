@@ -1,0 +1,473 @@
+[
+  {
+    "id": "npc-001",
+    "name": "Kafra Employee",
+    "type": "HEAL",
+    "x": 152,
+    "y": 326,
+    "map": "prontera",
+    "spriteRef": "kafra"
+  },
+  {
+    "id": "npc-002",
+    "name": "Kafra Employee",
+    "type": "HEAL",
+    "x": 151,
+    "y": 29,
+    "map": "prontera",
+    "spriteRef": "kafra"
+  },
+  {
+    "id": "npc-003",
+    "name": "Kafra Employee",
+    "type": "HEAL",
+    "x": 29,
+    "y": 207,
+    "map": "prontera",
+    "spriteRef": "kafra"
+  },
+  {
+    "id": "npc-004",
+    "name": "Kafra Employee",
+    "type": "HEAL",
+    "x": 282,
+    "y": 200,
+    "map": "prontera",
+    "spriteRef": "kafra"
+  },
+  {
+    "id": "npc-005",
+    "name": "Kafra Employee",
+    "type": "HEAL",
+    "x": 146,
+    "y": 89,
+    "map": "prontera",
+    "spriteRef": "kafra"
+  },
+  {
+    "id": "npc-006",
+    "name": "prt01",
+    "type": "WARP",
+    "x": 107,
+    "y": 215,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 240, "y": 139 }
+    ]
+  },
+  {
+    "id": "npc-007",
+    "name": "prt02",
+    "type": "WARP",
+    "x": 120,
+    "y": 267,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 180, "y": 97 }
+    ]
+  },
+  {
+    "id": "npc-008",
+    "name": "prt03",
+    "type": "WARP",
+    "x": 133,
+    "y": 183,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 50, "y": 105 }
+    ]
+  },
+  {
+    "id": "npc-009",
+    "name": "prt04",
+    "type": "WARP",
+    "x": 134,
+    "y": 221,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 131, "y": 71 }
+    ]
+  },
+  {
+    "id": "npc-010",
+    "name": "prt001",
+    "type": "WARP",
+    "x": 156,
+    "y": 22,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_fild08", "x": 170, "y": 375 }
+    ]
+  },
+  {
+    "id": "npc-011",
+    "name": "prt05",
+    "type": "WARP",
+    "x": 177,
+    "y": 221,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 168, "y": 128 }
+    ]
+  },
+  {
+    "id": "npc-012",
+    "name": "prt06",
+    "type": "WARP",
+    "x": 179,
+    "y": 184,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 60, "y": 73 }
+    ]
+  },
+  {
+    "id": "npc-013",
+    "name": "prt07",
+    "type": "WARP",
+    "x": 192,
+    "y": 267,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 178, "y": 55 }
+    ]
+  },
+  {
+    "id": "npc-014",
+    "name": "prt08",
+    "type": "WARP",
+    "x": 204,
+    "y": 192,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 68, "y": 134 }
+    ]
+  },
+  {
+    "id": "npc-015",
+    "name": "prt09",
+    "type": "WARP",
+    "x": 208,
+    "y": 154,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 172, "y": 29 }
+    ]
+  },
+  {
+    "id": "npc-016",
+    "name": "prt002",
+    "type": "WARP",
+    "x": 22,
+    "y": 203,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_fild05", "x": 367, "y": 205 }
+    ]
+  },
+  {
+    "id": "npc-017",
+    "name": "prt004",
+    "type": "WARP",
+    "x": 237,
+    "y": 317,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_church", "x": 100, "y": 60 }
+    ]
+  },
+  {
+    "id": "npc-018",
+    "name": "prt003",
+    "type": "WARP",
+    "x": 289,
+    "y": 203,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_fild06", "x": 27, "y": 193 }
+    ]
+  },
+  {
+    "id": "npc-019",
+    "name": "prt10",
+    "type": "WARP",
+    "x": 42,
+    "y": 67,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 44, "y": 29 }
+    ]
+  },
+  {
+    "id": "npc-020",
+    "name": "prt11",
+    "type": "WARP",
+    "x": 45,
+    "y": 346,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 80, "y": 110 }
+    ]
+  },
+  {
+    "id": "npc-021",
+    "name": "prt12",
+    "type": "WARP",
+    "x": 73,
+    "y": 100,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 208, "y": 176 }
+    ]
+  },
+  {
+    "id": "npc-022",
+    "name": "prt13",
+    "type": "WARP",
+    "x": 74,
+    "y": 90,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 248, "y": 170 }
+    ]
+  },
+  {
+    "id": "npc-023",
+    "name": "prt14-1",
+    "type": "WARP",
+    "x": 84,
+    "y": 89,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 282, "y": 176 }
+    ]
+  },
+  {
+    "id": "npc-024",
+    "name": "prt15-2",
+    "type": "WARP",
+    "x": 263,
+    "y": 279,
+    "map": "prontera",
+    "spriteRef": "warp_portal",
+    "destinations": [
+      { "mapName": "prt_in", "x": 227, "y": 18 }
+    ]
+  },
+  {
+    "id": "npc-025",
+    "name": "Guard",
+    "type": "NPC",
+    "x": 223,
+    "y": 99,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-026",
+    "name": "Guard",
+    "type": "NPC",
+    "x": 229,
+    "y": 104,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-027",
+    "name": "Guard",
+    "type": "NPC",
+    "x": 47,
+    "y": 339,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-028",
+    "name": "Shuger",
+    "type": "NPC",
+    "x": 101,
+    "y": 288,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-029",
+    "name": "Tono",
+    "type": "NPC",
+    "x": 54,
+    "y": 240,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-030",
+    "name": "Merideth",
+    "type": "NPC",
+    "x": 106,
+    "y": 116,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-031",
+    "name": "YuPi",
+    "type": "NPC",
+    "x": 160,
+    "y": 133,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-032",
+    "name": "YuNa",
+    "type": "NPC",
+    "x": 149,
+    "y": 202,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-033",
+    "name": "Strife",
+    "type": "NPC",
+    "x": 216,
+    "y": 70,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-034",
+    "name": "Dairenne",
+    "type": "NPC",
+    "x": 78,
+    "y": 150,
+    "map": "prontera",
+    "spriteRef": "npc_generic"
+  },
+  {
+    "id": "npc-035",
+    "name": "Vendor from Milk Ranch",
+    "type": "SHOP",
+    "x": 73,
+    "y": 134,
+    "map": "prontera",
+    "spriteRef": "shop_generic",
+    "shopItems": [
+      { "itemId": 519, "itemName": "Item 519", "price": -1 }
+    ]
+  },
+  {
+    "id": "npc-036",
+    "name": "Fruit Gardener",
+    "type": "SHOP",
+    "x": 104,
+    "y": 49,
+    "map": "prontera",
+    "spriteRef": "shop_generic",
+    "shopItems": [
+      { "itemId": 512, "itemName": "Item 512", "price": -1 },
+      { "itemId": 513, "itemName": "Item 513", "price": -1 }
+    ]
+  },
+  {
+    "id": "npc-037",
+    "name": "Butcher",
+    "type": "SHOP",
+    "x": 64,
+    "y": 125,
+    "map": "prontera",
+    "spriteRef": "shop_generic",
+    "shopItems": [
+      { "itemId": 517, "itemName": "Item 517", "price": -1 },
+      { "itemId": 528, "itemName": "Item 528", "price": -1 }
+    ]
+  },
+  {
+    "id": "npc-038",
+    "name": "Flower Girl",
+    "type": "SHOP",
+    "x": 58,
+    "y": 182,
+    "map": "prontera",
+    "spriteRef": "shop_generic",
+    "shopItems": [
+      { "itemId": 712, "itemName": "Item 712", "price": -1 },
+      { "itemId": 744, "itemName": "Item 744", "price": -1 }
+    ]
+  },
+  {
+    "id": "npc-039",
+    "name": "Flower Lady",
+    "type": "SHOP",
+    "x": 113,
+    "y": 42,
+    "map": "prontera",
+    "spriteRef": "shop_generic",
+    "shopItems": [
+      { "itemId": 712, "itemName": "Item 712", "price": -1 },
+      { "itemId": 744, "itemName": "Item 744", "price": -1 }
+    ]
+  },
+  {
+    "id": "npc-040",
+    "name": "Gift Merchant",
+    "type": "SHOP",
+    "x": 105,
+    "y": 87,
+    "map": "prontera",
+    "spriteRef": "shop_generic",
+    "shopItems": [
+      { "itemId": 734, "itemName": "Item 734", "price": -1 },
+      { "itemId": 735, "itemName": "Item 735", "price": -1 },
+      { "itemId": 736, "itemName": "Item 736", "price": -1 },
+      { "itemId": 737, "itemName": "Item 737", "price": -1 },
+      { "itemId": 746, "itemName": "Item 746", "price": -1 }
+    ]
+  },
+  {
+    "id": "npc-041",
+    "name": "Doll Supplier",
+    "type": "SHOP",
+    "x": 248,
+    "y": 153,
+    "map": "prontera",
+    "spriteRef": "shop_generic",
+    "shopItems": [
+      { "itemId": 740, "itemName": "Item 740", "price": -1 },
+      { "itemId": 741, "itemName": "Item 741", "price": -1 },
+      { "itemId": 742, "itemName": "Item 742", "price": -1 }
+    ]
+  },
+  {
+    "id": "npc-042",
+    "name": "Vegetable Gardener",
+    "type": "SHOP",
+    "x": 48,
+    "y": 58,
+    "map": "prontera",
+    "spriteRef": "shop_generic",
+    "shopItems": [
+      { "itemId": 515, "itemName": "Item 515", "price": -1 },
+      { "itemId": 516, "itemName": "Item 516", "price": -1 },
+      { "itemId": 535, "itemName": "Item 535", "price": -1 }
+    ]
+  }
+]

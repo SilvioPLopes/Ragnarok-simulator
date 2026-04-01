@@ -14,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -28,9 +29,9 @@ class BattleControllerTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
-    @MockBean BattleService battleService;
-    @MockBean AccountService accountService;
-    @MockBean JwtFilter jwtFilter;
+    @MockitoBean BattleService battleService;
+    @MockitoBean AccountService accountService;
+    @MockitoBean JwtFilter jwtFilter;
 
     @BeforeEach
     void passFilterThrough() throws Exception {
@@ -40,8 +41,8 @@ class BattleControllerTest {
 
     @Test
     void attack_returnsMessage() throws Exception {
-        when(battleService.realizarAtaque(1L, 2L)).thenReturn("ATAQUE: causou 45 de dano.");
-
+        BattleService.AttackResult mockResult = new BattleService.AttackResult("ATAQUE: causou 45 de dano.", 0);
+        when(battleService.realizarAtaque(1L, 2L)).thenReturn(mockResult);
         mvc.perform(post("/api/battle/attack")
                .contentType(MediaType.APPLICATION_JSON)
                .content(objectMapper.writeValueAsString(new AttackRequestDTO(1L, 2L))))

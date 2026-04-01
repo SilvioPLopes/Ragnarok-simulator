@@ -500,7 +500,7 @@ public class RagnarokTerminalRunner implements CommandLineRunner {
 
         String input = scanner.nextLine();
         if ("1".equals(input)) {
-            String resultado = battleService.realizarAtaque(currentPlayer.getId(), currentMonster.getId());
+            String resultado = battleService.realizarAtaque(currentPlayer.getId(), currentMonster.getId()).message();
             System.out.println("------------------------------------------------");
             System.out.println(resultado);
 

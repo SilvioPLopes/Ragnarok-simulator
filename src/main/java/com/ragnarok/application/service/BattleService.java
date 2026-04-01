@@ -53,6 +53,7 @@ public class BattleService {
         this.eventPublisher = eventPublisher;
     }
 
+
     public record AttackResult(String message, int monsterHpRemaining) {}
 
     @Transactional

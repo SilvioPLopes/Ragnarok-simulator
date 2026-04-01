@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/SilvioPLopes/ragnarok-core/actions/workflows/ci.yml/badge.svg)
 ![Coverage](https://img.shields.io/badge/coverage-85%25%2B-brightgreen)
-![Tests](https://img.shields.io/badge/tests-240%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-286%20passing-brightgreen)
 
 The core engine of a Ragnarok Online emulation and data-management system built on **Hexagonal Architecture (Ports and Adapters)**. All game data (monsters, items, maps, warps, drops, skills) is imported directly from the official **rAthena** server (`db/re/` — Renewal version).
 
@@ -36,7 +36,7 @@ The core engine of a Ragnarok Online emulation and data-management system built 
 | REST API + Swagger UI | Operational | Full game loop via browser: Players, Battle, Skills, Inventory, Map, Auth — `GET /swagger-ui.html` |
 | Spring Events | Operational | `BattleService` + `SkillCombatService` publish `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` handles loot, XP, resurrection |
 | Testcontainers | Operational | All integration tests use an ephemeral PostgreSQL container — no local DB required for `./mvnw test` |
-| Test Coverage | **240+ tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
+| Test Coverage | **286+ tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
 
 ---
 
@@ -464,12 +464,14 @@ com.ragnarok
 
 ## Test Coverage
 
-**240 tests — 0 failures — BUILD SUCCESS**
+**286 tests — 0 failures — BUILD SUCCESS**
 
 > Run with Java 17: `JAVA_HOME=/path/to/jdk-17 ./mvnw test`
 > (Java 21+ breaks Mockito inline-mock-maker without additional `--add-opens` configuration)
 >
 > **Integration tests require Docker Desktop running** — Testcontainers starts a PostgreSQL container automatically.
+>
+> **Nota arquitetural:** `AbstractIntegrationTest` ainda usa `@MockBean` (deprecated no Spring Boot 3.4, marcado para remoção). Quando a versão for atualizada para 3.5+, migrar para `@MockitoBean`.
 
 ### Unit Tests
 
@@ -483,25 +485,37 @@ com.ragnarok
 | `ScriptInterpreterTest` | 16 | Arithmetic formulas, stat variables, edge cases |
 | `WeaponSizeServiceTest` | 6 | Modifiers by weapon type and monster size |
 | `ClassChangeServiceTest` | 14 | `listarClassesDisponiveis`, `trocarClasse` with repository mocks |
-| `BattleServiceTest` | 10 | Normal attack, death (VICTORY), counter-attack, player death (FATAL), null guards |
+| `BattleServiceTest` | 10 | Normal attack, death (VICTORY), counter-attack, player death (FATAL), MonsterKilledEvent com loot e exp; retorna `AttackResult(message, monsterHpRemaining)` |
 | `BattleServiceLoggingTest` | 2 | WARN on dead-player attack, INFO on monster kill — Logback `ListAppender` |
 | `BattleEventHandlerTest` | 4 | Loot persistence, XP fields, level-up event publication, player resurrection |
 | `SkillCombatServiceTest` | 9 | Skill not found, not learned, insufficient SP, passive, HEAL, BUFF with duration, BUFF without effects, PHYSICAL_DAMAGE with/without target |
-| `PlayerControllerTest` | — | REST: list, get by id, create player |
-| `BattleControllerTest` | — | REST: attack, dead player 400, player/monster not found 404 |
-| `SkillControllerTest` | — | REST: list skills, learn, use |
-| `ItemControllerTest` | — | REST: list inventory, use item |
-| `MapControllerTest` | — | REST: current map, portals, walk, travel |
-| `GlobalExceptionHandlerTest` | — | HTTP 400 / 404 / 500 mapping for all domain exceptions |
+| `AccountServiceTest` | 6 | Register, duplicate username 409, login (retorna `LoginResult`), senha errada lança `GameException`, `validateOwnership` correto e incorreto |
+| `PlayerServiceTest` | 3 | Criar personagem + validação de flattening no banco, ressuscitar restaura HP, ressuscitar player inexistente lança exceção |
+| `MarketServiceTest` | 6 | Listar, criar, comprar, cancelar listing — incluindo validações de owner e estoque |
+| `CashShopServiceTest` | 4 | Listar itens, comprar com saldo suficiente/insuficiente, item inexistente |
+| `NpcShopServiceTest` | 4 | Comprar/vender via NPC, item inexistente, player não encontrado |
+| `AccountControllerTest` | 4 | REST: register 201, duplicate 409, login 200 com token, credenciais erradas 404 |
+| `PlayerControllerTest` | 4 | REST: list, get by id, create player, not found 404 |
+| `BattleControllerTest` | 3 | REST: attack, dead player 400, player/monster not found 404 |
+| `SkillControllerTest` | 3 | REST: list skills, learn, use |
+| `ItemControllerTest` | 2 | REST: list inventory, use item |
+| `MapControllerTest` | 5 | REST: current map, portals, walk, travel, not found |
+| `MarketControllerTest` | 2 | REST: list listings, buy |
+| `TradeControllerTest` | 3 | REST: criar oferta, aceitar, rejeitar |
+| `NpcShopControllerTest` | 2 | REST: listar itens NPC, comprar |
+| `CashShopControllerTest` | 2 | REST: listar itens cash, comprar |
+| `GlobalExceptionHandlerTest` | 5 | HTTP 400 / 404 / 500 mapping for all domain exceptions |
+| `JwtUtilTest` | 3 | Geração de token, extração de accountId, token expirado |
 | `CacheVerificationTest` | 2 | `@SpyBean` verifies `findByWeaponType` called exactly once in two consecutive hits |
 | `ClassChangeLoggingTest` | 2 | Log messages for class change |
+| `RagnarokTerminalRunnerTest` | 11 | Ressurreição pós-FATAL, moverParaMapa, handlePlayerDeath, caminhar (encontro/sem encontro), renderCharacterSelect (vazio/opção 0/seleção válida/múltiplos), renderExplorationMenu opção 6 |
 | `ParserLoggingTest` | 4 | Log output from rAthena YAML parsers |
 
 ### Integration Tests (Testcontainers — require Docker)
 
 | Class | Tests | Coverage |
 |---|---|---|
-| `BattleIntegrationTest` | 2 | Physical damage and counter-attack on real database |
+| `BattleIntegrationTest` | 2 | Dano físico (StatusATK + WeaponATK - DEF) e morte do jogador por contra-ataque no banco real |
 | `BattleLootIntegrationTest` | 1 | Drop RNG, inventory persistence, victory message includes drop names |
 | `SkillServiceIntegrationTest` | 10 | Listing, available skills, HEAL, BUFF, insufficient SP, PASSIVE, PHYSICAL_DAMAGE, BUFF without effects |
 | `SkillServiceAprenderTest` | 7 | Level increment, skillPoints decrement, max level, non-existent skill, null jobClass |
@@ -509,12 +523,10 @@ com.ragnarok
 | `ItemServiceIntegrationTest` | 15 | Inventory CRUD, equip/unequip, auto slot-swap |
 | `StartupDataLoaderSqlTest` | 9 | `monster_drops.sql` and `map_monsters.sql`: FK safety, idempotency, WHERE EXISTS |
 | `PlayerInventoryIntegrationTest` | 2 | Equip and unequip on real database |
-| `InventoryDebugTest` | 3 | Inventory integrity |
 | `MapSpawnIntegrationTest` | 1 | MapMonster persistence and retrieval by map ID |
 | `MonsterDropIntegrationTest` | 1 | Drop reading from database |
-| `RagnarokTerminalRunnerTest` | 11 | Auto-resurrection, exploration flows |
-| `MonsterCatalogServiceTest` | 1 | Full ETL API → database |
-| `ItemLoadingTest` | 1 | Item loading |
+| `MonsterCatalogServiceTest` | 1 | Full ETL API → database; cleanup corrigido para respeitar FK em `map_monsters` |
+| `CacheVerificationTest` | 2 | `@SpringBootTest` + Testcontainers; verifica que `findByWeaponType` é chamado uma única vez em dois hits consecutivos |
 | `RagnarokCoreApplicationTests` | 1 | Spring context loads successfully |
 
 ---
@@ -551,6 +563,7 @@ com.ragnarok
 - **RathenaImporter local classpath:** reads from `src/main/resources/rathena/` instead of GitHub; threshold checks prevent re-import of already-populated data
 - **PlayerSeedLoader duplicate guard:** fixed from `existsById(1L)` to `existsByName("Hero")` — restarts no longer create duplicate seed players
 - **Antifraude integration:** `FraudClient` calls antifraude microservice; Resilience4j CircuitBreaker with fail-open fallback
+- **Suíte de testes green (286 testes):** corrigidos 7 erros de compilação (`BattleService.AttackResult` record em vez de `String` nos mocks), `PlayerControllerTest` completado com `@MockitoBean ClassChangeService`, `AccountServiceTest` corrigido para `GameException` nas credenciais inválidas, `PlayerServiceTest` com `@Transactional` + cleanup de dados de teste, `MonsterCatalogServiceTest` com DELETE em `map_monsters` antes de `monsters`, `RagnarokTerminalRunner` corrigido para usar `.message()` no retorno de `realizarAtaque`
 
 ### Backlog
 
@@ -593,10 +606,13 @@ JAVA_HOME=/path/to/jdk-17 ./mvnw test
 # Run only unit tests (no Docker needed)
 JAVA_HOME=/path/to/jdk-17 ./mvnw test -Djacoco.skip=true \
   -Dtest="BattleServiceTest,BattleEventHandlerTest,BattleServiceLoggingTest,\
-RagnarokTerminalRunnerTest,GlobalExceptionHandlerTest,PlayerControllerTest,\
-BattleControllerTest,SkillControllerTest,ItemControllerTest,MapControllerTest,\
+RagnarokTerminalRunnerTest,GlobalExceptionHandlerTest,\
+AccountControllerTest,PlayerControllerTest,BattleControllerTest,\
+SkillControllerTest,ItemControllerTest,MapControllerTest,\
+MarketControllerTest,TradeControllerTest,NpcShopControllerTest,CashShopControllerTest,\
+AccountServiceTest,PlayerServiceTest,MarketServiceTest,CashShopServiceTest,NpcShopServiceTest,\
 WeaponSizeServiceTest,SkillCombatServiceTest,ItemServiceTest,ClassChangeServiceTest,\
-CacheVerificationTest"
+JwtUtilTest,ClassChangeLoggingTest,ParserLoggingTest"
 
 # Run a specific test
 ./mvnw test -Dtest=BattleEngineTest

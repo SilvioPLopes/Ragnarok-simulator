@@ -98,9 +98,9 @@ class BattleIntegrationTest extends AbstractIntegrationTest {
         // 6. EXECUÇÃO: A BATALHA
         // =================================================================================
         System.out.println("5. Executando Ataque...");
-        String battleLog = battleService.realizarAtaque(player.getId(), monster.getId());
+        BattleService.AttackResult battleLog = battleService.realizarAtaque(player.getId(), monster.getId());
 
-        System.out.println(">>> RESULTADO: " + battleLog);
+        System.out.println(">>> RESULTADO: " + battleLog.message());
 
         // =================================================================================
         // 7. VALIDAÇÃO MATEMÁTICA
@@ -115,12 +115,12 @@ class BattleIntegrationTest extends AbstractIntegrationTest {
         assertNotNull(battleLog);
 
         // Verifica se identificou a arma correta (Teste do PlayerMapper + ItemMapper)
-        assertTrue(battleLog.contains("Balmung"),
+        assertTrue(battleLog.message().contains("Balmung"),
                 "ERRO: O sistema não identificou a arma equipada. Verifique o PlayerMapper.");
 
         // Verifica o Dano Matemático (Teste da BattleEngine)
-        assertTrue(battleLog.contains("causou 340 de dano"),
-                "ERRO: O dano calculado está incorreto. Esperado: 340. Log: " + battleLog);
+        assertTrue(battleLog.message().contains("causou 340 de dano"),
+                "ERRO: O dano calculado está incorreto. Esperado: 340. Log: " + battleLog.message());
     }
     @Test
     @DisplayName("Batalha: Deve processar a morte do Jogador em um contra-ataque letal")
@@ -145,9 +145,9 @@ class BattleIntegrationTest extends AbstractIntegrationTest {
         monster.setAttack(500);
         monster = monsterRepository.save(monster);
 
-        String battleLog = battleService.realizarAtaque(player.getId(), monster.getId());
+        BattleService.AttackResult battleLog = battleService.realizarAtaque(player.getId(), monster.getId());
 
-        assertTrue(battleLog.startsWith("FATAL:"), "ERRO: O fluxo não interrompeu na morte do jogador.");
-        assertTrue(battleLog.contains("você morreu"), "ERRO: Mensagem de Game Over ausente no log.");
+        assertTrue(battleLog.message().startsWith("FATAL:"), "ERRO: O fluxo não interrompeu na morte do jogador.");
+        assertTrue(battleLog.message().contains("você morreu"), "ERRO: Mensagem de Game Over ausente no log.");
     }
 }

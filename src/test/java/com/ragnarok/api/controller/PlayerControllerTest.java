@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragnarok.api.GlobalExceptionHandler;
 import com.ragnarok.api.dto.request.CreatePlayerRequestDTO;
 import com.ragnarok.application.service.AccountService;
+import com.ragnarok.application.service.ClassChangeService;
 import com.ragnarok.application.service.PlayerService;
 import com.ragnarok.domain.model.Player;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
@@ -15,11 +16,12 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -31,9 +33,10 @@ class PlayerControllerTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
-    @MockBean PlayerService playerService;
-    @MockBean AccountService accountService;
-    @MockBean JwtFilter jwtFilter;
+    @MockitoBean PlayerService playerService;
+    @MockitoBean AccountService accountService;
+    @MockitoBean ClassChangeService classChangeService;
+    @MockitoBean JwtFilter jwtFilter;
 
     @BeforeEach
     void passFilterThrough() throws Exception {
@@ -43,7 +46,7 @@ class PlayerControllerTest {
 
     @Test
     void getPlayers_returnsEmptyList() throws Exception {
-        when(playerService.listarPersonagens()).thenReturn(List.of());
+        when(playerService.listarPersonagens(1L)).thenReturn(List.of());
         mvc.perform(get("/api/players"))
            .andExpect(status().isOk())
            .andExpect(content().json("[]"));
@@ -78,8 +81,7 @@ class PlayerControllerTest {
         Player created = new Player();
         created.setId(1L);
         created.setName("Hero");
-        when(playerService.criarNovoPersonagem("Hero", "NOVICE")).thenReturn(created);
-
+        when(playerService.criarNovoPersonagem(eq("Hero"), eq("NOVICE"), any())).thenReturn(created);
         mvc.perform(post("/api/players")
                .contentType(MediaType.APPLICATION_JSON)
                .content(objectMapper.writeValueAsString(new CreatePlayerRequestDTO("Hero", "NOVICE"))))
