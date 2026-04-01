@@ -1,8 +1,10 @@
 package com.ragnarok.api.controller;
 
 import com.ragnarok.api.dto.request.*;
+import com.ragnarok.api.dto.response.InventoryItemResponseDTO;
 import com.ragnarok.api.dto.response.ShopItemResponseDTO;
 import com.ragnarok.application.service.NpcShopService;
+import com.ragnarok.infrastructure.persistence.PlayerItemEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -27,7 +29,18 @@ public class NpcShopController {
     }
 
     @PostMapping("/sell")
-    public void sell(@RequestBody NpcSellRequestDTO dto) {
-        npcShopService.sell(dto.playerId(), dto.playerItemId(), dto.quantity());
+    public List<InventoryItemResponseDTO> sell(@RequestBody NpcSellRequestDTO dto) {
+        return npcShopService.sell(dto.playerId(), dto.playerItemId(), dto.quantity())
+                .stream().map(this::toDTO).toList();
+    }
+
+    private InventoryItemResponseDTO toDTO(PlayerItemEntity pi) {
+        return new InventoryItemResponseDTO(
+                pi.getId().toString(),
+                pi.getItem() != null ? pi.getItem().getName() : "Unknown",
+                pi.getItem() != null && pi.getItem().getType() != null
+                        ? pi.getItem().getType().name() : "UNKNOWN",
+                pi.getAmount(),
+                pi.getEquipped());
     }
 }

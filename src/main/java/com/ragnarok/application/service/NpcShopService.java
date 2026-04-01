@@ -56,7 +56,7 @@ public class NpcShopService {
     }
 
     @Transactional
-    public void sell(Long playerId, UUID playerItemId, int quantity) {
+    public List<PlayerItemEntity> sell(Long playerId, UUID playerItemId, int quantity) {
         PlayerItemEntity pi = playerItemRepository.findById(playerItemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item nao encontrado no inventario"));
         if (!pi.getPlayer().getId().equals(playerId)) {
@@ -70,11 +70,13 @@ public class NpcShopService {
         player.setZenny(player.getZenny() + credit);
 
         if (pi.getAmount() == quantity) {
-            playerItemRepository.delete(pi);
+            // Remove via collection so orphanRemoval handles the DELETE cleanly,
+            // avoiding ObjectDeletedException caused by cascade + explicit delete conflict.
+            player.getInventory().remove(pi);
         } else {
             pi.setAmount(pi.getAmount() - quantity);
-            playerItemRepository.save(pi);
         }
         playerRepository.save(player);
+        return playerItemRepository.findByPlayerId(playerId);
     }
 }
