@@ -44,3 +44,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Assets de sprites gerados — nao versionar binarios de imagem
+src/main/resources/static/assets/
