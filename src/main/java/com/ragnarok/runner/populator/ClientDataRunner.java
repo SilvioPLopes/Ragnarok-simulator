@@ -8,26 +8,30 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Ativa o populador de dados do cliente bRO na inicialização.
+ * Ativa os populadores de dados do cliente bRO na inicialização.
  * Só roda quando ro.assets.run-populator=true em application.properties.
- * @Order(4) — depois do RathenaImporter (1), PlayerSeed (2), StartupDataLoader (3).
+ * @Order(5) — depois do NpcSeedLoader (4). NpcSpritePopulator depende de NPCs no banco.
  */
 @Component
-@Order(4)
+@Order(5)
 @ConditionalOnProperty(name = "ro.assets.run-populator", havingValue = "true")
 public class ClientDataRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ClientDataRunner.class);
-    private final ItemInfoPopulator populator;
 
-    public ClientDataRunner(ItemInfoPopulator populator) {
-        this.populator = populator;
+    private final ItemInfoPopulator itemInfoPopulator;
+    private final NpcSpritePopulator npcSpritePopulator;
+
+    public ClientDataRunner(ItemInfoPopulator itemInfoPopulator, NpcSpritePopulator npcSpritePopulator) {
+        this.itemInfoPopulator = itemInfoPopulator;
+        this.npcSpritePopulator = npcSpritePopulator;
     }
 
     @Override
     public void run(String... args) throws Exception {
         log.info("=== CLIENT DATA POPULATOR INICIADO ===");
-        populator.run();
+        itemInfoPopulator.run();
+        npcSpritePopulator.run();
         log.info("=== CLIENT DATA POPULATOR CONCLUIDO ===");
     }
 }
