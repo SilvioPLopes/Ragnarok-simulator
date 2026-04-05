@@ -14,6 +14,6 @@ public class RoAssetsConfig implements WebMvcConfigurer {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/ro-assets/**")
-                .addResourceLocations("file:///" + externalPath + "/");
+                .addResourceLocations("file:///" + externalPath.replaceAll("/+$", "") + "/");
     }
 }
