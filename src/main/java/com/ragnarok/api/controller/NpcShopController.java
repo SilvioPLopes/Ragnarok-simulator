@@ -42,6 +42,7 @@ public class NpcShopController {
                         ? pi.getItem().getType().name() : "UNKNOWN",
                 pi.getAmount(),
                 pi.getEquipped(),
-                pi.getItem() != null ? pi.getItem().getImgUrl() : null);
+                pi.getItem() != null ? pi.getItem().getImgUrl() : null,
+                pi.getItem() != null ? pi.getItem().getDescription() : null);
     }
 }
