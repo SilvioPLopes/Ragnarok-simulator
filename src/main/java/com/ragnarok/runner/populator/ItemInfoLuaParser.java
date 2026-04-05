@@ -74,7 +74,7 @@ public class ItemInfoLuaParser {
                     continue;
                 }
                 Matcher m = DESC_LINE.matcher(line);
-                if (m.find()) description.add(m.group(1));
+                if (m.find()) description.add(removeColorCodes(convertLuaEscapes(m.group(1))));
                 continue;
             }
 
@@ -91,13 +91,42 @@ public class ItemInfoLuaParser {
             Matcher f = STRING_FIELD.matcher(line);
             while (f.find()) {
                 switch (f.group(1)) {
-                    case "identifiedDisplayName"  -> displayName  = f.group(2);
-                    case "identifiedResourceName" -> resourceName = f.group(2);
+                    case "identifiedDisplayName"  -> displayName  = convertLuaEscapes(f.group(2));
+                    case "identifiedResourceName" -> resourceName = convertLuaEscapes(f.group(2));
                 }
             }
         }
         if (currentId != -1) flush(result, currentId, displayName, resourceName, description);
         return result;
+    }
+
+    /** Converte escapes decimais do Lua (ex: \227 → ã) em caracteres reais. */
+    String convertLuaEscapes(String input) {
+        if (input == null) return null;
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        while (i < input.length()) {
+            if (input.charAt(i) == '\\' && i + 1 < input.length()
+                    && Character.isDigit(input.charAt(i + 1))) {
+                int end = i + 1;
+                while (end < input.length() && end < i + 4 && Character.isDigit(input.charAt(end))) {
+                    end++;
+                }
+                int code = Integer.parseInt(input.substring(i + 1, end));
+                result.append((char) code);
+                i = end;
+            } else {
+                result.append(input.charAt(i));
+                i++;
+            }
+        }
+        return result.toString();
+    }
+
+    /** Remove códigos de cor do cliente RO (ex: ^0000ff) das strings. */
+    String removeColorCodes(String input) {
+        if (input == null) return null;
+        return input.replaceAll("\\^[0-9a-fA-F]{6}", "");
     }
 
     private void flush(Map<Integer, ItemClientData> result, int id,

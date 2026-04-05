@@ -1,6 +1,8 @@
 package com.ragnarok.application.service;
 
 import com.ragnarok.infrastructure.persistence.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -9,6 +11,8 @@ import java.util.UUID;
 
 @Service
 public class NpcShopService {
+
+    private static final Logger log = LoggerFactory.getLogger(NpcShopService.class);
 
     private final ItemRepository itemRepository;
     private final PlayerRepository playerRepository;
@@ -28,6 +32,7 @@ public class NpcShopService {
 
     @Transactional
     public void buy(Long playerId, Long itemId, int quantity) {
+        log.info("[NpcShop] Compra iniciada: playerId={}, itemId={}, quantidade={}", playerId, itemId, quantity);
         ItemEntity item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item nao encontrado: " + itemId));
         PlayerEntity player = playerRepository.findById(playerId)
@@ -35,6 +40,7 @@ public class NpcShopService {
 
         long total = (long) item.getPrice() * quantity;
         if (player.getZenny() < total) {
+            log.warn("[NpcShop] Zenny insuficiente: playerId={}, necessario={}, disponivel={}", playerId, total, player.getZenny());
             throw new IllegalStateException("Zenny insuficiente");
         }
         player.setZenny(player.getZenny() - total);
@@ -53,16 +59,20 @@ public class NpcShopService {
             pi.setEquipped(false);
             playerItemRepository.save(pi);
         }
+        log.info("[NpcShop] Compra concluida: playerId={}, itemId={}, qty={}, zenny_gasto={}", playerId, itemId, quantity, total);
     }
 
     @Transactional
     public List<PlayerItemEntity> sell(Long playerId, UUID playerItemId, int quantity) {
+        log.info("[NpcShop] Venda iniciada: playerId={}, playerItemId={}, quantidade={}", playerId, playerItemId, quantity);
         PlayerItemEntity pi = playerItemRepository.findById(playerItemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item nao encontrado no inventario"));
         if (!pi.getPlayer().getId().equals(playerId)) {
+            log.warn("[NpcShop] Tentativa de vender item de outro jogador: playerId={}, itemOwner={}", playerId, pi.getPlayer().getId());
             throw new IllegalArgumentException("Item nao pertence a este jogador");
         }
         if (pi.getAmount() < quantity) {
+            log.warn("[NpcShop] Quantidade insuficiente para venda: playerId={}, disponivel={}, pedido={}", playerId, pi.getAmount(), quantity);
             throw new IllegalStateException("Quantidade insuficiente no inventario");
         }
         long credit = (long) pi.getItem().getPrice() * quantity / 2;
@@ -77,6 +87,7 @@ public class NpcShopService {
             pi.setAmount(pi.getAmount() - quantity);
         }
         playerRepository.save(player);
+        log.info("[NpcShop] Venda concluida: playerId={}, credit_recebido={}", playerId, credit);
         return playerItemRepository.findByPlayerId(playerId);
     }
 }

@@ -71,6 +71,8 @@ Do NOT use `WebMvcConfigurer.addCorsMappings()` — it runs after servlet filter
 
 `InventoryItemResponseDTO` fields: `id` (UUID), `name`, `type`, `amount`, `equipped`, `imgUrl` (`/assets/items/{id}.png` or null), `description` (text from bRO lua or null).
 
+`NpcResponseDTO` fields: `id`, `name`, `type`, `x`, `y`, `spriteRef`, `spriteUrl` (`/ro-assets/output-npcs/{jobId}_0_0.png` after populator runs, otherwise null).
+
 ### Map
 | Method | Path |
 |---|---|
@@ -98,6 +100,7 @@ See root `CLAUDE.md` for full tables.
 | `ItemService` | Inventory, use, `equiparItem(playerId, itemId)` (toggle equip/unequip) |
 | `MapService` | Current map, portals, walk (encounter), travel |
 | `BattleEventHandler` | `@EventListener`: loot persistence, XP, level up, resurrection |
+| `NpcSpritePopulator` | Resolves NPC spriteRef → JT constant → jobId → sprite URL, persists to `npc.sprite_url` |
 
 ---
 
@@ -121,15 +124,17 @@ Threshold: skips re-import if DB already has ≥2600 monsters or ≥25000 items.
 
 ### bRO Client Data Populator — `com.ragnarok.runner.populator`
 
-One-time migration tool that enriches items already imported by `RathenaImporter` with client-side data from the bRO game client.
+One-time migration tool that enriches items and NPCs already imported by `RathenaImporter` / `NpcSeedLoader` with client-side data from the bRO game client.
 
 **Files:**
 | Class | Responsibility |
 |---|---|
 | `ItemInfoLuaParser` | Parses `iteminfo.lua` (EUC-KR encoding, UTF-8 fallback). Returns `Map<Integer, ItemClientData>`. |
 | `SpriteConverter` | Indexes PNGs from `icones-png/` by filename (lowercase), copies to `static/assets/items/{itemId}.png`. |
-| `ItemInfoPopulator` | Spring `@Component`. Orchestrates: parse lua → copy sprites → update `ItemEntity` (name, imgUrl, description). |
-| `ClientDataRunner` | `CommandLineRunner` at `@Order(4)`. Only runs when `ro.assets.run-populator=true`. |
+| `ItemInfoPopulator` | `@Component`. Orchestrates items: parse lua → copy sprites → update `ItemEntity` (name, imgUrl, description). |
+| `NpcLuaParser` | Plain class (no `@Component`). Parses `npcidentity_decompiled.lua` (UTF-16 LE with BOM). Returns `Map<String, Integer>` of constant→jobId. |
+| `NpcSpritePopulator` | `@Component`. Bridges seed `spriteRef` names → `JT_*` lua constants → jobId → `/ro-assets/output-npcs/{jobId}_0_0.png`. Updates `npc.sprite_url`. |
+| `ClientDataRunner` | `CommandLineRunner` at `@Order(5)`. Only runs when `ro.assets.run-populator=true`. Calls `ItemInfoPopulator.run()` then `NpcSpritePopulator.run()`. |
 | `dto/ItemClientData` | Immutable DTO: `itemId`, `displayName`, `resourceName`, `description`. |
 
 **Configuration (`application.properties`):**
@@ -138,20 +143,64 @@ ro.assets.run-populator=false                    # set true to run on next start
 ro.assets.iteminfo-lua-path=C:/Users/silve/Documents/Sprites-Projeto/item-info/iteminfo.lua
 ro.assets.icons-png-path=C:/Users/silve/Documents/Sprites-Projeto/icones-png/
 ro.assets.icons-output-path=src/main/resources/static/assets/items/
+ro.assets.npc-identity-lua-path=C:/Users/silve/Documents/Sprites-Projeto/item-info/npcidentity_decompiled.lua
+ro.assets.external-path=C:/Users/silve/Documents/Sprites-Projeto   # base dir for /ro-assets/** handler
 ```
 
 **Flow:**
-1. `RathenaImporter` must have already run (items table populated)
-2. Set `ro.assets.run-populator=true`, start app
-3. Populator: parses lua → copies ~1000+ PNGs renamed to `{itemId}.png` → updates `name`, `img_url`, `description` in DB
-4. Revert `ro.assets.run-populator=false`
+1. `RathenaImporter` and `NpcSeedLoader` must have already run (tables populated)
+2. Run zrenderer bat to generate `output-monsters/` and `output-npcs/` under `external-path`
+3. Set `ro.assets.run-populator=true`, start app
+4. Populator: items (parse lua → copy PNGs → update DB) + NPCs (parse npcidentity lua → resolve jobIds → update `sprite_url`)
+5. Revert `ro.assets.run-populator=false`
 
-**Output:** PNGs served at `GET /assets/items/{itemId}.png` (Spring Boot static resources from `src/main/resources/static/`).
+**Output:**
+- Item PNGs: `GET /assets/items/{itemId}.png` (Spring static resources from `src/main/resources/static/`)
+- Monster sprites: `GET /ro-assets/output-monsters/{jobId}_0_0.png`
+- NPC sprites: `GET /ro-assets/output-npcs/{jobId}_0_0.png`
+
+**NPC spriteRef bridge (hardcoded in `NpcSpritePopulator`):**
+| `spriteRef` (seed) | `JT_*` constant |
+|---|---|
+| `kafra` | `JT_4_F_KAFRA1` |
+| `warp_portal` | `JT_WARPNPC` |
+| `npc_generic` | `JT_1_F_01` |
+| `shop_generic` | `JT_1_F_MERCHANT_01` |
 
 **Caveats:**
 - `icons-output-path` is a relative path — only works when launched via `./mvnw spring-boot:run` from project root
-- `ItemInfoLuaParser` depth tracking handles multi-block lua items (unidentified + identified blocks). `DESC_START` uses negative lookbehind `(?<![a-zA-Z])` to avoid matching `unidentifiedDescriptionName`
+- `npcidentity_decompiled.lua` is UTF-16 LE with BOM (`FF FE`) — `NpcLuaParser` handles both with-BOM and without-BOM variants
+- `ClientDataRunner` is `@Order(5)` — must run after `NpcSeedLoader` (`@Order(4)`)
 - Idempotent — re-running overwrites with same data
+- `NpcSpritePopulator` saves each NPC individually (no bulk save) — acceptable given the small NPC dataset
+
+### RoAssetsConfig — External Asset Serving
+
+`RoAssetsConfig` implements `WebMvcConfigurer` and maps `/ro-assets/**` to an external filesystem path.
+
+```java
+// ro.assets.external-path defaults to "" — handler skipped if blank
+@Value("${ro.assets.external-path:}")
+private String externalPath;
+
+@Override
+public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    if (externalPath.isBlank()) return;
+    registry.addResourceHandler("/ro-assets/**")
+            .addResourceLocations("file:///" + externalPath.replaceAll("/+$", "") + "/");
+}
+```
+
+- Safe on machines without `ro.assets.external-path` set (e.g., CI, other devs) — handler simply won't register
+- The `output-monsters/` and `output-npcs/` subdirs under `external-path` are where zrenderer writes rendered PNGs
+
+### Flyway Migrations
+
+| Version | File | Change |
+|---|---|---|
+| V1 | `V1__init.sql` | Initial schema |
+| V2 | `V2__*.sql` | (existing) |
+| V3 | `V3__npc_sprite_url.sql` | `ALTER TABLE npcs ADD COLUMN sprite_url VARCHAR(255)` |
 
 ### PlayerSeedLoader
 
@@ -187,7 +236,8 @@ Checks `existsByName("Hero")` before seeding — prevents duplicate "Hero" playe
 - `BattleResponseDTO` does not expose `monsterAlive` / `monsterHpRemaining` — front can't loop attacks until death without polling
 - NPC shop, Market, Trade, Cash Shop controllers exist but are not connected to antifraude fraud checks
 - Skills in battle (REST) return the kill message from `SkillCombatService` but the front-end has no UI for it yet
-- Monster/NPC sprites (`.act`/`.spr` format) are not yet converted — requires a dedicated parser for RO's proprietary animation format
+- Monster sprites served via `/ro-assets/output-monsters/{jobId}_0_0.png` — requires zrenderer bat to have run first; front falls back to CDN (`ratemyserver.net`) then error icon
+- NPC sprites served via `/ro-assets/output-npcs/{jobId}_0_0.png` — requires populator (`ro.assets.run-populator=true`) to have run; `spriteUrl` is null until then
 
 ---
 

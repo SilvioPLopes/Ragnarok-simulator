@@ -76,7 +76,7 @@ public class NpcSpritePopulator {
                         entry.getValue(), entry.getKey());
                 continue;
             }
-            result.put(entry.getKey(), "/ro-assets/output-npcs/" + jobId + "_0_0.png");
+            result.put(entry.getKey(), "/ro-assets/output-npcs/" + jobId + "/0-0.png");
         }
         return result;
     }

@@ -8,11 +8,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class RoAssetsConfig implements WebMvcConfigurer {
 
-    @Value("${ro.assets.external-path}")
+    @Value("${ro.assets.external-path:}")
     private String externalPath;
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        if (externalPath.isBlank()) return;
         registry.addResourceHandler("/ro-assets/**")
                 .addResourceLocations("file:///" + externalPath.replaceAll("/+$", "") + "/");
     }

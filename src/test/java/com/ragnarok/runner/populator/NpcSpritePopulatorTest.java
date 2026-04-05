@@ -22,10 +22,10 @@ class NpcSpritePopulatorTest {
 
         Map<String, String> urls = populator.buildSpriteUrlMap(constants);
 
-        assertThat(urls).containsEntry("kafra",        "/ro-assets/output-npcs/117_0_0.png");
-        assertThat(urls).containsEntry("warp_portal",  "/ro-assets/output-npcs/45_0_0.png");
-        assertThat(urls).containsEntry("npc_generic",  "/ro-assets/output-npcs/66_0_0.png");
-        assertThat(urls).containsEntry("shop_generic", "/ro-assets/output-npcs/73_0_0.png");
+        assertThat(urls).containsEntry("kafra",        "/ro-assets/output-npcs/117/0-0.png");
+        assertThat(urls).containsEntry("warp_portal",  "/ro-assets/output-npcs/45/0-0.png");
+        assertThat(urls).containsEntry("npc_generic",  "/ro-assets/output-npcs/66/0-0.png");
+        assertThat(urls).containsEntry("shop_generic", "/ro-assets/output-npcs/73/0-0.png");
     }
 
     @Test
@@ -38,6 +38,6 @@ class NpcSpritePopulatorTest {
         Map<String, String> urls = populator.buildSpriteUrlMap(constants);
 
         assertThat(urls).containsOnlyKeys("kafra");
-        assertThat(urls.get("kafra")).isEqualTo("/ro-assets/output-npcs/117_0_0.png");
+        assertThat(urls.get("kafra")).isEqualTo("/ro-assets/output-npcs/117/0-0.png");
     }
 }

@@ -9,6 +9,8 @@ import com.ragnarok.domain.model.ItemType;
 import com.ragnarok.application.service.ScriptInterpreter;
 import com.ragnarok.infrastructure.client.mapper.ItemMapper;
 import com.ragnarok.infrastructure.persistence.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,8 @@ import java.util.UUID;
 @Service
 @Transactional
 public class ItemService {
+
+    private static final Logger log = LoggerFactory.getLogger(ItemService.class);
 
     private final ItemRepository itemRepository;
     private final PlayerRepository playerRepository;
@@ -49,9 +53,11 @@ public class ItemService {
     }
 
     public String equiparItem(Long playerId, UUID playerItemId) {
+        log.info("[ItemService] Equipando item: playerId={}, playerItemId={}", playerId, playerItemId);
         PlayerItemEntity playerItem = playerItemRepository.findById(playerItemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item não encontrado no inventário."));
         if (!playerItem.getPlayer().getId().equals(playerId)) {
+            log.warn("[ItemService] Tentativa de equipar item de outro jogador: playerId={}, itemOwner={}", playerId, playerItem.getPlayer().getId());
             throw new GameException("Tentativa de equipar item de outro jogador!");
         }
         ItemType tipo = playerItem.getItem().getType();
@@ -62,6 +68,7 @@ public class ItemService {
     }
 
     public String usarItem(UUID playerItemId) {
+        log.info("[ItemService] Usando item: playerItemId={}", playerItemId);
         PlayerItemEntity playerItem = playerItemRepository.findById(playerItemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item não encontrado no inventário."));
 
