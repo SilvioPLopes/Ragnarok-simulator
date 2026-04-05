@@ -34,8 +34,9 @@ public class NpcService {
 
     public List<NpcResponseDTO> getNpcsForMap(String mapName) {
         return npcRepository.findByMapName(mapName).stream()
-                .map(npc -> new NpcResponseDTO(npc.getId(), npc.getName(), npc.getType().name(),
-                        npc.getX(), npc.getY(), npc.getSpriteRef()))
+                .map(npc -> new NpcResponseDTO(
+                        npc.getId(), npc.getName(), npc.getType().name(),
+                        npc.getX(), npc.getY(), npc.getSpriteRef(), npc.getSpriteUrl()))
                 .toList();
     }
 
