@@ -2799,4 +2799,34 @@ INSERT INTO map_portals (map_from, x_from, y_from, map_to, x_to, y_to) VALUES
   ('hu_fild07', 56, 36, 'yuno_fild09', 47, 375),
   ('yuno_fild09', 47, 377, 'hu_fild07', 56, 38),
   ('hu_fild07', 226, 36, 'yuno_fild09', 220, 372),
-  ('yuno_fild09', 220, 374, 'hu_fild07', 226, 38);
+  ('yuno_fild09', 220, 374, 'hu_fild07', 226, 38),
+
+  -- Fix: mapas sem portal de saída (7 dead-ends corrigidos em 2026-04-05)
+  -- alde_gld (1 saída)
+  ('alde_gld', 183, 198, 'turbo_room', 100, 62),
+  -- jupe_ele_r (1 saída)
+  ('jupe_ele_r', 49, 30, 'jupe_gate', 49, 55),
+  -- moc_fild20 (13 saídas — espelha cada uma das 13 entradas)
+  ('moc_fild20', 36, 177, 'morocc', 299, 207),
+  ('moc_fild20', 36, 177, 'moc_fild11', 377, 197),
+  ('moc_fild20', 349, 179, 'moc_fild21', 26, 196),
+  ('moc_fild20', 349, 179, 'moc_fild22', 32, 196),
+  ('moc_fild20', 210, 342, 'moc_fild01', 101, 16),
+  ('moc_fild20', 36, 177, 'moc_fild07', 380, 201),
+  ('moc_fild20', 197, 24, 'moc_fild11', 189, 360),
+  ('moc_fild20', 349, 179, 'moc_fild13', 32, 171),
+  ('moc_fild20', 197, 24, 'moc_fild16', 124, 381),
+  ('moc_fild20', 197, 24, 'moc_fild16', 333, 380),
+  ('moc_fild20', 209, 333, 'prt_fild09', 246, 17),
+  ('moc_fild20', 209, 333, 'prt_fild09', 95, 19),
+  ('moc_fild20', 209, 333, 'prt_fild10', 263, 22),
+  -- prt_lib_q (1 saída)
+  ('prt_lib_q', 89, 43, 'prt_q', 155, 358),
+  -- ra_san01 (3 saídas)
+  ('ra_san01', 140, 19, 'ra_san02', 213, 280),
+  ('ra_san01', 140, 19, 'ra_san03', 123, 283),
+  ('ra_san01', 140, 19, 'ra_san04', 119, 104),
+  -- tha_t06 (1 saída)
+  ('tha_t06', 206, 11, 'tha_t05', 185, 235),
+  -- tha_t12 (1 saída)
+  ('tha_t12', 115, 16, 'thana_step', 181, 15);
