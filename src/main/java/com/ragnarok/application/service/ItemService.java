@@ -181,14 +181,17 @@ public class ItemService {
             player.setSpCurrent(novoSp);
         }
 
-        playerRepository.save(player);
-
+        // Consume item before saving player — prevents cascade CascadeType.ALL on
+        // player.inventory from re-merging the item after deletion within the same tx
         if (itemEntity.getAmount() > 1) {
             itemEntity.setAmount(itemEntity.getAmount() - 1);
             playerItemRepository.save(itemEntity);
         } else {
+            player.getInventory().remove(itemEntity);
             playerItemRepository.delete(itemEntity);
         }
+
+        playerRepository.save(player);
 
         if (hpCurado > 0 && spCurado > 0) {
             return String.format("Você usou %s e recuperou %d de HP e %d de SP.", nome, hpCurado, spCurado);

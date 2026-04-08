@@ -20,16 +20,25 @@ public class MapService {
     private final MapPortalRepository portalRepository;
     private final MapMonsterRepository mapMonsterRepository;
     private final MonsterRepository monsterRepository;
+    private final GameMapRepository gameMapRepository;
     private final Random rng = new Random();
 
     public MapService(PlayerRepository playerRepository,
                       MapPortalRepository portalRepository,
                       MapMonsterRepository mapMonsterRepository,
-                      MonsterRepository monsterRepository) {
+                      MonsterRepository monsterRepository,
+                      GameMapRepository gameMapRepository) {
         this.playerRepository = playerRepository;
         this.portalRepository = portalRepository;
         this.mapMonsterRepository = mapMonsterRepository;
         this.monsterRepository = monsterRepository;
+        this.gameMapRepository = gameMapRepository;
+    }
+
+    public String getDisplayName(String mapId) {
+        return gameMapRepository.findById(mapId)
+                .map(m -> m.getDisplayName() != null ? m.getDisplayName() : m.getName())
+                .orElse(mapId);
     }
 
     public String getCurrentMap(Long playerId) {

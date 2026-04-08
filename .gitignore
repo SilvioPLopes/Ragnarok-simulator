@@ -47,3 +47,10 @@ build/
 
 # Assets de sprites gerados — nao versionar binarios de imagem
 src/main/resources/static/assets/
+
+# Assets externos do cliente bRO — nao versionar binarios
+*.bmp
+*.spr
+*.act
+output-monsters/
+output-npcs/
