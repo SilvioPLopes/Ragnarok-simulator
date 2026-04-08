@@ -34,9 +34,17 @@ public class NpcService {
 
     public List<NpcResponseDTO> getNpcsForMap(String mapName) {
         return npcRepository.findByMapName(mapName).stream()
-                .map(npc -> new NpcResponseDTO(
-                        npc.getId(), npc.getName(), npc.getType().name(),
-                        npc.getX(), npc.getY(), npc.getSpriteRef(), npc.getSpriteUrl()))
+                .map(npc -> {
+                    List<String> destinations = "WARP".equals(npc.getType().name())
+                            ? warpDestinationRepository.findByNpcId(npc.getId()).stream()
+                                    .map(NpcWarpDestinationEntity::getMapName)
+                                    .toList()
+                            : List.of();
+                    return new NpcResponseDTO(
+                            npc.getId(), npc.getName(), npc.getType().name(),
+                            npc.getX(), npc.getY(), npc.getSpriteRef(), npc.getSpriteUrl(),
+                            destinations);
+                })
                 .toList();
     }
 
