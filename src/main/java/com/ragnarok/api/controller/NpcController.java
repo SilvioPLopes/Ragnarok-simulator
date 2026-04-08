@@ -31,6 +31,11 @@ public class NpcController {
         return npcService.getShop(npcId);
     }
 
+    @GetMapping("/npcs/{npcId}/dialog")
+    public NpcDialogResponseDTO getDialog(@PathVariable Long npcId) {
+        return npcService.getDialog(npcId);
+    }
+
     @PostMapping("/npcs/{npcId}/buy")
     public NpcBuyResponseDTO buyFromNpc(@PathVariable Long npcId,
                                         @RequestBody NpcBuyFromNpcRequestDTO dto,

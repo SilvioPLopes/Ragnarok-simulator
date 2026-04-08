@@ -156,4 +156,10 @@ public class NpcService {
                 .map(ItemEntity::getName)
                 .orElse("Unknown");
     }
+
+    public NpcDialogResponseDTO getDialog(Long npcId) {
+        NpcEntity npc = npcRepository.findById(npcId)
+                .orElseThrow(() -> new IllegalArgumentException("NPC não encontrado: " + npcId));
+        return new NpcDialogResponseDTO(npc.getDialog());
+    }
 }
