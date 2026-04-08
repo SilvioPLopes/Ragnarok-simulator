@@ -7,7 +7,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import com.ragnarok.infrastructure.persistence.mapper.PlayerMapper;
 import com.ragnarok.infrastructure.persistence.PlayerEntity;
+import com.ragnarok.infrastructure.persistence.PlayerItemRepository;
 import com.ragnarok.infrastructure.persistence.PlayerRepository;
+import com.ragnarok.infrastructure.persistence.PlayerSkillRepository;
 import com.ragnarok.domain.exception.GameException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +24,16 @@ public class PlayerService {
 
     private final PlayerRepository playerRepository;
     private final PlayerMapper playerMapper;
+    private final PlayerItemRepository playerItemRepository;
+    private final PlayerSkillRepository playerSkillRepository;
 
-    public PlayerService(PlayerRepository playerRepository, PlayerMapper playerMapper) {
+    public PlayerService(PlayerRepository playerRepository, PlayerMapper playerMapper,
+                         PlayerItemRepository playerItemRepository,
+                         PlayerSkillRepository playerSkillRepository) {
         this.playerRepository = playerRepository;
         this.playerMapper = playerMapper;
+        this.playerItemRepository = playerItemRepository;
+        this.playerSkillRepository = playerSkillRepository;
     }
 
     public Player criarNovoPersonagem(String nome, String classe, Long accountId) {
@@ -120,5 +128,15 @@ public class PlayerService {
     public PlayerEntity buscarPersonagem(Long id) {
         return playerRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Player not found: " + id));
+    }
+
+    @Transactional
+    public void deletarPersonagem(Long playerId) {
+        if (!playerRepository.existsById(playerId)) {
+            throw new IllegalArgumentException("Player not found: " + playerId);
+        }
+        playerItemRepository.deleteByPlayerId(playerId);
+        playerSkillRepository.deleteByPlayerId(playerId);
+        playerRepository.deleteById(playerId);
     }
 }

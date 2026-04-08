@@ -14,4 +14,6 @@ public interface PlayerItemRepository extends JpaRepository<PlayerItemEntity, UU
     List<PlayerItemEntity> findByPlayerIdAndEquippedTrue(Long playerId);
 
     java.util.List<PlayerItemEntity> findByPlayerIdAndItemId(Long playerId, Long itemId);
+
+    void deleteByPlayerId(Long playerId);
 }
