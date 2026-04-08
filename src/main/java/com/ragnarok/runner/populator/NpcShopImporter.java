@@ -140,7 +140,10 @@ public class NpcShopImporter {
             }
         }
 
-        log.info("NpcShopImporter: {} NPCs criados, {} sprite URLs atualizadas, {} itens inseridos.",
-                npcsCreated, npcsUpdated, itemsInserted);
+        // Garante que qualquer NPC com itens de loja (incluindo shops do bRO não presentes
+        // no shops.txt) tenha type=SHOP para abrir o modal correto no frontend.
+        int fixed = npcRepository.fixShopTypes();
+        log.info("NpcShopImporter: {} NPCs criados, {} sprite URLs atualizadas, {} itens inseridos, {} types corrigidos para SHOP.",
+                npcsCreated, npcsUpdated, itemsInserted, fixed);
     }
 }

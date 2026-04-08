@@ -1,9 +1,11 @@
 package com.ragnarok.infrastructure.persistence;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -31,4 +33,13 @@ public interface NpcRepository extends JpaRepository<NpcEntity, Long> {
             @Param("x") int x,
             @Param("y") int y,
             @Param("radius") int radius);
+
+    /** Corrige NPCs que têm itens em npc_shop_items mas type != SHOP. */
+    @Modifying
+    @Transactional
+    @Query(value = "UPDATE npcs SET type = 'SHOP' " +
+                   "WHERE id IN (SELECT DISTINCT npc_id FROM npc_shop_items) " +
+                   "AND type != 'SHOP'",
+           nativeQuery = true)
+    int fixShopTypes();
 }
