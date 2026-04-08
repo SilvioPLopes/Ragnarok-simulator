@@ -12,4 +12,5 @@ public interface NpcRepository extends JpaRepository<NpcEntity, Long> {
     boolean existsBySeedId(String seedId);
     Optional<NpcEntity> findBySeedId(String seedId);
     Optional<NpcEntity> findFirstByMapNameAndXAndY(String mapName, int x, int y);
+    Optional<NpcEntity> findFirstByMapNameAndName(String mapName, String name);
 }

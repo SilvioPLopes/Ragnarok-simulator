@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -171,7 +172,7 @@ public class NpcService {
     }
 
     public NpcDialogTreeDTO getDialog(Long npcId) {
-        npcRepository.findById(npcId)
+        NpcEntity npc = npcRepository.findById(npcId)
                 .orElseThrow(() -> new IllegalArgumentException("NPC não encontrado: " + npcId));
 
         return npcDialogRepository.findByNpcId(npcId)
@@ -187,6 +188,33 @@ public class NpcService {
                         return new NpcDialogTreeDTO(List.of());
                     }
                 })
-                .orElse(new NpcDialogTreeDTO(List.of()));
+                .orElseGet(() -> buildLegacyTree(npc));
+    }
+
+    /** Fallback: constrói árvore simples a partir do campo legado npcs.dialog. */
+    private NpcDialogTreeDTO buildLegacyTree(NpcEntity npc) {
+        String legacy = npc.getDialog();
+        if (legacy == null || legacy.isBlank()) {
+            return new NpcDialogTreeDTO(List.of());
+        }
+        String[] lines = legacy.split("\n");
+        List<String> texts = new ArrayList<>();
+        String speaker = null;
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isBlank()) continue;
+            if (speaker == null && trimmed.matches("^\\[.+]$")) {
+                speaker = trimmed.substring(1, trimmed.length() - 1);
+            } else {
+                texts.add(trimmed);
+            }
+        }
+        if (texts.isEmpty()) {
+            return new NpcDialogTreeDTO(List.of());
+        }
+        return new NpcDialogTreeDTO(List.of(
+                new NpcDialogNode.DialogNode(speaker, List.copyOf(texts), 1),
+                new NpcDialogNode.ActionNode("close", null)
+        ));
     }
 }

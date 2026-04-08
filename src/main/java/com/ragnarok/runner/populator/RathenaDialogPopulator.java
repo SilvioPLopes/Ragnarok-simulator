@@ -56,8 +56,12 @@ public class RathenaDialogPopulator {
                 continue;
             }
 
+            // Match por coordenadas exatas; fallback por nome+mapa se não encontrar
             Optional<NpcEntity> existing = npcRepository.findFirstByMapNameAndXAndY(
                     data.mapName(), data.x(), data.y());
+            if (existing.isEmpty()) {
+                existing = npcRepository.findFirstByMapNameAndName(data.mapName(), data.name());
+            }
 
             NpcEntity npc;
             if (existing.isPresent()) {
