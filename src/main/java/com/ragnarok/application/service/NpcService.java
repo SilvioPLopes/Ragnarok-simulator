@@ -57,7 +57,10 @@ public class NpcService {
         List<NpcShopResponseDTO.ShopItemDTO> dtos = items.stream()
                 .map(si -> {
                     int price = si.getPrice() == -1 ? resolveItemPrice(si.getItemId()) : si.getPrice();
-                    return new NpcShopResponseDTO.ShopItemDTO(si.getItemId(), resolveItemName(si.getItemId()), price);
+                    String imgUrl = itemRepository.findById(si.getItemId())
+                            .map(ItemEntity::getImgUrl)
+                            .orElse(null);
+                    return new NpcShopResponseDTO.ShopItemDTO(si.getItemId(), resolveItemName(si.getItemId()), price, imgUrl);
                 })
                 .toList();
         return new NpcShopResponseDTO(npc.getName(), dtos);
