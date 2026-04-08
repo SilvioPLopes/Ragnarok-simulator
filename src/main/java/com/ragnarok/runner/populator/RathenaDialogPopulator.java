@@ -46,7 +46,7 @@ public class RathenaDialogPopulator {
                 continue;
             }
 
-            Optional<NpcEntity> existing = npcRepository.findByMapNameAndXAndY(
+            Optional<NpcEntity> existing = npcRepository.findFirstByMapNameAndXAndY(
                     data.mapName(), data.x(), data.y());
 
             if (existing.isPresent()) {
