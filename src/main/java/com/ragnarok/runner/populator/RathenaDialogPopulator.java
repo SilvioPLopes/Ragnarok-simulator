@@ -1,5 +1,9 @@
 package com.ragnarok.runner.populator;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragnarok.infrastructure.persistence.NpcDialogEntity;
+import com.ragnarok.infrastructure.persistence.NpcDialogRepository;
 import com.ragnarok.infrastructure.persistence.NpcEntity;
 import com.ragnarok.infrastructure.persistence.NpcRepository;
 import com.ragnarok.infrastructure.persistence.NpcType;
@@ -22,11 +26,17 @@ public class RathenaDialogPopulator {
     @Value("${ro.assets.rathena-npc-path:}")
     private String rathenaNpcPath;
 
-    private final NpcRepository npcRepository;
+    private final NpcRepository       npcRepository;
+    private final NpcDialogRepository npcDialogRepository;
+    private final ObjectMapper        objectMapper;
     private final RathenaNpcScriptParser parser = new RathenaNpcScriptParser();
 
-    public RathenaDialogPopulator(NpcRepository npcRepository) {
-        this.npcRepository = npcRepository;
+    public RathenaDialogPopulator(NpcRepository npcRepository,
+                                  NpcDialogRepository npcDialogRepository,
+                                  ObjectMapper objectMapper) {
+        this.npcRepository       = npcRepository;
+        this.npcDialogRepository = npcDialogRepository;
+        this.objectMapper        = objectMapper;
     }
 
     public void run() throws IOException {
@@ -38,10 +48,10 @@ public class RathenaDialogPopulator {
         List<RathenaNpcScriptData> entries = parser.parseDirectory(Path.of(rathenaNpcPath));
         log.info("RathenaDialogPopulator: {} entradas para processar.", entries.size());
 
-        int updated = 0, created = 0, skipped = 0;
+        int updated = 0, created = 0, skipped = 0, dialogsSaved = 0;
 
         for (RathenaNpcScriptData data : entries) {
-            if (data.dialog() == null) {
+            if (data.dialog() == null && data.nodes().isEmpty()) {
                 skipped++;
                 continue;
             }
@@ -49,16 +59,17 @@ public class RathenaDialogPopulator {
             Optional<NpcEntity> existing = npcRepository.findFirstByMapNameAndXAndY(
                     data.mapName(), data.x(), data.y());
 
+            NpcEntity npc;
             if (existing.isPresent()) {
-                NpcEntity npc = existing.get();
-                npc.setDialog(data.dialog());
+                npc = existing.get();
+                if (data.dialog() != null) npc.setDialog(data.dialog());
                 if (npc.getSpriteUrl() == null && data.spriteId() > 0) {
                     npc.setSpriteUrl("/ro-assets/output-npcs/" + data.spriteId() + "/0-0.png");
                 }
                 npcRepository.save(npc);
                 updated++;
             } else {
-                NpcEntity npc = new NpcEntity();
+                npc = new NpcEntity();
                 npc.setSeedId("rathena_" + data.mapName() + "_" + data.x() + "_" + data.y());
                 npc.setName(data.name());
                 npc.setMapName(data.mapName());
@@ -69,12 +80,28 @@ public class RathenaDialogPopulator {
                 if (data.spriteId() > 0) {
                     npc.setSpriteUrl("/ro-assets/output-npcs/" + data.spriteId() + "/0-0.png");
                 }
-                npcRepository.save(npc);
+                npc = npcRepository.save(npc);
                 created++;
+            }
+
+            // Salvar árvore estruturada em npc_dialogs
+            if (!data.nodes().isEmpty()) {
+                try {
+                    String nodesJson = objectMapper.writeValueAsString(data.nodes());
+                    npcDialogRepository.deleteByNpcId(npc.getId());
+                    NpcDialogEntity dialogEntity = new NpcDialogEntity();
+                    dialogEntity.setNpcId(npc.getId());
+                    dialogEntity.setNodes(nodesJson);
+                    npcDialogRepository.save(dialogEntity);
+                    dialogsSaved++;
+                } catch (JsonProcessingException e) {
+                    log.warn("RathenaDialogPopulator: erro ao serializar nodes NPC id={}: {}",
+                            npc.getId(), e.getMessage());
+                }
             }
         }
 
-        log.info("RathenaDialogPopulator: {} NPCs atualizados, {} criados, {} sem diálogo ignorados.",
-                updated, created, skipped);
+        log.info("RathenaDialogPopulator: {} atualizados, {} criados, {} ignorados, {} dialog trees salvas.",
+                updated, created, skipped, dialogsSaved);
     }
 }
