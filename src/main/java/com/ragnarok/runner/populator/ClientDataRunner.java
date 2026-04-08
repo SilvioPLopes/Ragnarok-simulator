@@ -21,17 +21,46 @@ public class ClientDataRunner implements CommandLineRunner {
 
     private final ItemInfoPopulator itemInfoPopulator;
     private final NpcSpritePopulator npcSpritePopulator;
+    private final NaviMapPopulator naviMapPopulator;
+    private final NaviNpcPopulator naviNpcPopulator;
+    private final NaviLinkPopulator naviLinkPopulator;
+    private final NpcShopImporter npcShopImporter;
+    private final SkillClientDataPopulator skillClientDataPopulator;
+    private final NaviMobPopulator naviMobPopulator;
+    private final RathenaDialogPopulator rathenaDialogPopulator;
 
-    public ClientDataRunner(ItemInfoPopulator itemInfoPopulator, NpcSpritePopulator npcSpritePopulator) {
+    public ClientDataRunner(ItemInfoPopulator itemInfoPopulator,
+                            NpcSpritePopulator npcSpritePopulator,
+                            NaviMapPopulator naviMapPopulator,
+                            NaviNpcPopulator naviNpcPopulator,
+                            NaviLinkPopulator naviLinkPopulator,
+                            NpcShopImporter npcShopImporter,
+                            SkillClientDataPopulator skillClientDataPopulator,
+                            NaviMobPopulator naviMobPopulator,
+                            RathenaDialogPopulator rathenaDialogPopulator) {
         this.itemInfoPopulator = itemInfoPopulator;
         this.npcSpritePopulator = npcSpritePopulator;
+        this.naviMapPopulator = naviMapPopulator;
+        this.naviNpcPopulator = naviNpcPopulator;
+        this.naviLinkPopulator = naviLinkPopulator;
+        this.npcShopImporter = npcShopImporter;
+        this.skillClientDataPopulator = skillClientDataPopulator;
+        this.naviMobPopulator = naviMobPopulator;
+        this.rathenaDialogPopulator = rathenaDialogPopulator;
     }
 
     @Override
     public void run(String... args) throws Exception {
         log.info("=== CLIENT DATA POPULATOR INICIADO ===");
-        itemInfoPopulator.run();
-        npcSpritePopulator.run();
+        itemInfoPopulator.run();           // 1. items: lua → PNGs → DB
+        npcSpritePopulator.run();          // 2. NPC sprite URLs via npcidentity (seed NPCs)
+        naviMapPopulator.run();            // 3. map display names
+        naviNpcPopulator.run();            // 4. NPCs do navi — coordenadas + spriteUrl direta
+        naviLinkPopulator.run();           // 5. portals/warps
+        npcShopImporter.run();             // 6. NPC shop inventories + spriteUrl de lojas
+        skillClientDataPopulator.run();    // 7. skill descriptions e icons
+        naviMobPopulator.run();            // 8. monster spawns
+        rathenaDialogPopulator.run();      // 9. diálogos rAthena + sprite fallback
         log.info("=== CLIENT DATA POPULATOR CONCLUIDO ===");
     }
 }
