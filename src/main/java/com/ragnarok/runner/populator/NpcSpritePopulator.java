@@ -48,27 +48,34 @@ public class NpcSpritePopulator {
         Map<String, Integer> constantToJobId = parser.parseNpcIdentity(npcIdentityLuaPath);
         log.info("NpcSpritePopulator: {} constantes lidas.", constantToJobId.size());
 
-        Map<String, String> spriteRefToUrl = buildSpriteUrlMap(constantToJobId);
-
         List<NpcEntity> npcs = npcRepository.findAll();
+        Map<String, String> spriteRefToUrl = buildSpriteUrlMap(constantToJobId, npcs);
+
         int updated = 0;
+        int unresolved = 0;
         for (NpcEntity npc : npcs) {
             if (npc.getSpriteRef() == null) continue;
             String url = spriteRefToUrl.get(npc.getSpriteRef());
-            if (url == null) continue;
+            if (url == null) {
+                unresolved++;
+                continue;
+            }
             npc.setSpriteUrl(url);
             npcRepository.save(npc);
             updated++;
         }
-        log.info("NpcSpritePopulator: {} NPCs atualizados.", updated);
+        log.info("NpcSpritePopulator: {} NPCs atualizados, {} sem match de sprite.", updated, unresolved);
     }
 
     /**
-     * Constrói o map spriteRef -> URL usando a bridge SPRITE_REF_TO_JT.
+     * Constrói o map spriteRef -> URL usando a bridge SPRITE_REF_TO_JT (fallback para refs especiais)
+     * e match dinâmico para todos os spriteRefs dos NPCs do banco.
      * Package-private para facilitar testes.
      */
-    Map<String, String> buildSpriteUrlMap(Map<String, Integer> constantToJobId) {
+    Map<String, String> buildSpriteUrlMap(Map<String, Integer> constantToJobId, List<NpcEntity> npcs) {
         Map<String, String> result = new LinkedHashMap<>();
+
+        // 1. Bridge hardcoded (fallback para refs especiais)
         for (Map.Entry<String, String> entry : SPRITE_REF_TO_JT.entrySet()) {
             Integer jobId = constantToJobId.get(entry.getValue());
             if (jobId == null) {
@@ -77,6 +84,22 @@ public class NpcSpritePopulator {
                 continue;
             }
             result.put(entry.getKey(), "/ro-assets/output-npcs/" + jobId + "/0-0.png");
+        }
+
+        // 2. Match dinâmico para todos os spriteRefs do banco
+        for (NpcEntity npc : npcs) {
+            String spriteRef = npc.getSpriteRef();
+            if (spriteRef == null || result.containsKey(spriteRef)) continue;
+
+            // Tentar JT_<SPRITE_REF_UPPERCASE>
+            Integer jobId = constantToJobId.get("JT_" + spriteRef.toUpperCase());
+            if (jobId == null) {
+                // Tentar sem prefixo (nome direto)
+                jobId = constantToJobId.get(spriteRef.toUpperCase());
+            }
+            if (jobId != null) {
+                result.put(spriteRef, "/ro-assets/output-npcs/" + jobId + "/0-0.png");
+            }
         }
         return result;
     }
