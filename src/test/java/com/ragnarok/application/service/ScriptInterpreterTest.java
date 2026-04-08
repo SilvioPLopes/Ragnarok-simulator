@@ -129,4 +129,21 @@ class ScriptInterpreterTest {
         Map<String, Integer> vars = Map.of("skill_lv", 3);
         assertThat(interpreter.evaluateFormula("STR * 5", vars)).isEqualTo(0);
     }
+
+    @Test
+    void itemheal_com_chaves_formato_bRO() {
+        // Scripts do bRO são envolvidos em { ... } — deve ser interpretado corretamente
+        EffectResult r = interpreter.interpret("{ itemheal 50,0; }");
+        assertThat(r.supported()).isTrue();
+        assertThat(r.hpHeal()).isEqualTo(50);
+        assertThat(r.spHeal()).isEqualTo(0);
+    }
+
+    @Test
+    void heal_com_chaves_formato_bRO() {
+        EffectResult r = interpreter.interpret("{ heal 30, 10; }");
+        assertThat(r.supported()).isTrue();
+        assertThat(r.hpHeal()).isEqualTo(30);
+        assertThat(r.spHeal()).isEqualTo(10);
+    }
 }

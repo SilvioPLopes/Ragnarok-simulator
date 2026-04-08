@@ -34,7 +34,11 @@ public class ScriptInterpreter {
         if (script == null || script.isBlank()) return EffectResult.unsupported();
 
         String resolved = script.replace("skill_lv", String.valueOf(skillLevel));
+        // Scripts do bRO são envolvidos em chaves: "{ itemheal 50,0; }" — remover wrapper
         String trimmed = resolved.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            trimmed = trimmed.substring(1, trimmed.length() - 1).trim();
+        }
 
         int end = trimmed.length();
         for (int i = 0; i < trimmed.length(); i++) {
