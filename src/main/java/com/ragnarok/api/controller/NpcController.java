@@ -32,7 +32,7 @@ public class NpcController {
     }
 
     @GetMapping("/npcs/{npcId}/dialog")
-    public NpcDialogResponseDTO getDialog(@PathVariable Long npcId) {
+    public NpcDialogTreeDTO getDialog(@PathVariable Long npcId) {
         return npcService.getDialog(npcId);
     }
 

@@ -1,8 +1,13 @@
 package com.ragnarok.application.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragnarok.api.dto.response.*;
 import com.ragnarok.domain.exception.GameException;
+import com.ragnarok.domain.model.NpcDialogNode;
 import com.ragnarok.infrastructure.persistence.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,25 +16,33 @@ import java.util.List;
 @Service
 public class NpcService {
 
+    private static final Logger log = LoggerFactory.getLogger(NpcService.class);
+
     private final NpcRepository npcRepository;
     private final NpcShopItemRepository shopItemRepository;
     private final NpcWarpDestinationRepository warpDestinationRepository;
     private final PlayerRepository playerRepository;
     private final PlayerItemRepository playerItemRepository;
     private final ItemRepository itemRepository;
+    private final NpcDialogRepository npcDialogRepository;
+    private final ObjectMapper        objectMapper;
 
     public NpcService(NpcRepository npcRepository,
                       NpcShopItemRepository shopItemRepository,
                       NpcWarpDestinationRepository warpDestinationRepository,
                       PlayerRepository playerRepository,
                       PlayerItemRepository playerItemRepository,
-                      ItemRepository itemRepository) {
+                      ItemRepository itemRepository,
+                      NpcDialogRepository npcDialogRepository,
+                      ObjectMapper objectMapper) {
         this.npcRepository = npcRepository;
         this.shopItemRepository = shopItemRepository;
         this.warpDestinationRepository = warpDestinationRepository;
         this.playerRepository = playerRepository;
         this.playerItemRepository = playerItemRepository;
         this.itemRepository = itemRepository;
+        this.npcDialogRepository = npcDialogRepository;
+        this.objectMapper = objectMapper;
     }
 
     public List<NpcResponseDTO> getNpcsForMap(String mapName) {
@@ -157,9 +170,23 @@ public class NpcService {
                 .orElse("Unknown");
     }
 
-    public NpcDialogResponseDTO getDialog(Long npcId) {
-        NpcEntity npc = npcRepository.findById(npcId)
+    public NpcDialogTreeDTO getDialog(Long npcId) {
+        npcRepository.findById(npcId)
                 .orElseThrow(() -> new IllegalArgumentException("NPC não encontrado: " + npcId));
-        return new NpcDialogResponseDTO(npc.getDialog());
+
+        return npcDialogRepository.findByNpcId(npcId)
+                .map(entity -> {
+                    try {
+                        List<NpcDialogNode> nodes = objectMapper.readValue(
+                                entity.getNodes(),
+                                objectMapper.getTypeFactory()
+                                        .constructCollectionType(List.class, NpcDialogNode.class));
+                        return new NpcDialogTreeDTO(nodes);
+                    } catch (JsonProcessingException e) {
+                        log.warn("Erro ao desserializar nodes NPC id={}: {}", npcId, e.getMessage());
+                        return new NpcDialogTreeDTO(List.of());
+                    }
+                })
+                .orElse(new NpcDialogTreeDTO(List.of()));
     }
 }
