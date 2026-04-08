@@ -55,8 +55,9 @@ public class RathenaNpcScriptParser {
     );
 
     /**
-     * Parseia todos os .txt nos subdiretórios relevantes de rootDir.
-     * Subdiretórios: cities, kafras, jobs, other, merchants
+     * Parseia todos os .txt em rootDir recursivamente.
+     * Exclui subdiretórios que não contêm scripts de NPC interativos:
+     * scripts_custom, script_addons, re (renewal-only), pre-re.
      */
     public List<RathenaNpcScriptData> parseDirectory(Path rootDir) throws IOException {
         List<RathenaNpcScriptData> results = new ArrayList<>();
@@ -66,14 +67,17 @@ public class RathenaNpcScriptParser {
             return results;
         }
 
-        List<Path> txtFiles = new ArrayList<>();
-        for (String subdir : List.of("cities", "kafras", "jobs", "other", "merchants")) {
-            Path dir = rootDir.resolve(subdir);
-            if (!Files.exists(dir)) continue;
-            Files.walk(dir, 1)
-                    .filter(p -> p.toString().endsWith(".txt"))
-                    .forEach(txtFiles::add);
-        }
+        List<Path> txtFiles = Files.walk(rootDir)
+                .filter(p -> p.toString().endsWith(".txt"))
+                .filter(p -> {
+                    String rel = rootDir.relativize(p).toString().replace('\\', '/');
+                    // Ignora diretórios de scripts customizados e addons que não são NPCs padrão
+                    return !rel.startsWith("scripts_custom/")
+                        && !rel.startsWith("script_addons/")
+                        && !rel.startsWith("re/")
+                        && !rel.startsWith("pre-re/");
+                })
+                .collect(java.util.stream.Collectors.toList());
 
         for (Path file : txtFiles) {
             try {
