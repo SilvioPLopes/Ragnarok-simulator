@@ -40,7 +40,7 @@ public sealed interface NpcDialogNode
             List<Choice>   choices
     ) implements NpcDialogNode {
 
-        record Choice(String label, String next) {}
+        public record Choice(String label, String next) {}
     }
 
     /**
