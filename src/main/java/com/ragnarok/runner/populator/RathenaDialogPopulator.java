@@ -56,11 +56,18 @@ public class RathenaDialogPopulator {
                 continue;
             }
 
-            // Match por coordenadas exatas; fallback por nome+mapa se não encontrar
+            // Match 1: coordenadas exatas
             Optional<NpcEntity> existing = npcRepository.findFirstByMapNameAndXAndY(
                     data.mapName(), data.x(), data.y());
+            // Match 2: nome + mapa (caso coordenadas difiram)
             if (existing.isEmpty()) {
                 existing = npcRepository.findFirstByMapNameAndName(data.mapName(), data.name());
+            }
+            // Match 3: proximidade 5 tiles — liga scripts rAthena (inglês) a NPCs do cliente bRO (português)
+            if (existing.isEmpty()) {
+                List<NpcEntity> nearby = npcRepository.findNaviNpcsByProximity(
+                        data.mapName(), data.x(), data.y(), 5);
+                existing = nearby.isEmpty() ? Optional.empty() : Optional.of(nearby.get(0));
             }
 
             NpcEntity npc;
