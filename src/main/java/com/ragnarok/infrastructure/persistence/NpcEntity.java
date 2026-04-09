@@ -34,6 +34,12 @@ public class NpcEntity {
     @Column(name = "sprite_ref")
     private String spriteRef;
 
+    @Column(name = "sprite_url")
+    private String spriteUrl;
+
+    @Column(columnDefinition = "TEXT")
+    private String dialog;
+
     @OneToMany(mappedBy = "npc", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<NpcShopItemEntity> shopItems = new ArrayList<>();
 

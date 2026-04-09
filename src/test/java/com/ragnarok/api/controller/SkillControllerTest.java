@@ -46,7 +46,7 @@ class SkillControllerTest {
     @Test
     void listSkills_returnsList() throws Exception {
         when(skillService.listarSkillsDoPlayer(1L)).thenReturn(
-                List.of(new SkillRowDTO("SM_BASH", "Bash", 10, 1, true, null)));
+                List.of(new SkillRowDTO("SM_BASH", "Bash", 10, 1, true, null, null)));
 
         mvc.perform(get("/api/players/1/skills"))
            .andExpect(status().isOk())

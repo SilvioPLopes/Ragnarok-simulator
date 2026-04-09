@@ -6,5 +6,6 @@ public record SkillRowDTO(
         int maxLevel,
         int currentLevel,
         boolean canLearn,
-        String blockedReason   // null when canLearn = true
+        String blockedReason,   // null when canLearn = true
+        String description
 ) {}

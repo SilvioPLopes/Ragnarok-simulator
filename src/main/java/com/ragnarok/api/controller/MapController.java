@@ -34,7 +34,7 @@ public class MapController {
             accountService.validateOwnership(accountId, playerId);
         }
         String map = mapService.getCurrentMap(playerId);
-        return new MapInfoResponseDTO(map, mapService.getPortals(map));
+        return new MapInfoResponseDTO(map, mapService.getDisplayName(map), mapService.getPortals(map));
     }
 
     @GetMapping("/api/maps/{mapId}/portals")

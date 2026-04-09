@@ -15,4 +15,7 @@ public class GameMapEntity { // Nome da classe: GameMapEntity
     private String name;
     private String type;
     private String imgUrl;
+
+    @Column(name = "display_name")
+    private String displayName;
 }

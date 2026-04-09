@@ -117,6 +117,15 @@ public class PlayerController {
         return ResponseEntity.ok(toDTO(playerService.buscarPersonagem(id)));
     }
 
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Delete a player character")
+    public void deletePlayer(@PathVariable Long id, HttpServletRequest request) {
+        Long accountId = (Long) request.getAttribute("accountId");
+        if (accountId != null) accountService.validateOwnership(accountId, id);
+        playerService.deletarPersonagem(id);
+    }
+
     // PlayerEntity uses getIntelligence() for the int_val column field
     private PlayerResponseDTO toDTO(PlayerEntity e) {
         return new PlayerResponseDTO(

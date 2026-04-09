@@ -69,6 +69,6 @@ public class SkillController {
 
     private SkillRowResponseDTO toDTO(SkillRowDTO dto) {
         return new SkillRowResponseDTO(dto.aegisName(), dto.name(),
-                dto.maxLevel(), dto.currentLevel(), dto.canLearn(), dto.blockedReason());
+                dto.maxLevel(), dto.currentLevel(), dto.canLearn(), dto.blockedReason(), dto.description());
     }
 }

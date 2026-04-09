@@ -93,8 +93,11 @@ public class SkillService {
                 }
             }
 
+            String description = skillRepository.findByAegisName(skillId)
+                    .map(SkillEntity::getDescription)
+                    .orElse(null);
             resultado.add(new SkillRowDTO(skillId, skillId, maxLevel, currentLevel,
-                    blockedReason == null, blockedReason));
+                    blockedReason == null, blockedReason, description));
         }
 
         resultado.sort(Comparator.comparing(SkillRowDTO::aegisName));
@@ -116,8 +119,9 @@ public class SkillService {
                 boolean isUsavel = ("BUFF".equalsIgnoreCase(et) || "HEAL".equalsIgnoreCase(et))
                         && (tt == null || "SELF".equalsIgnoreCase(tt));
                 if (isUsavel) {
+                    String description = skill.getDescription();
                     resultado.add(new SkillRowDTO(ps.getSkillId(), ps.getSkillId(),
-                            0, ps.getCurrentLevel(), true, null));
+                            0, ps.getCurrentLevel(), true, null, description));
                 }
             });
         }

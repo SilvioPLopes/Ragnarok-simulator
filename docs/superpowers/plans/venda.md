@@ -1,0 +1,3 @@
+Atue como Tech Lead Backend Java/Kotlin. Objetivo 1: Analise o endpoint GET que alimenta a loja e garanta que o DTO de resposta inclua o 'name' real do item e a referência da 'sprite', não apenas o ID. Objetivo 2: No endpoint POST de venda, certifique-se de que a resposta HTTP devolva o estado atualizado do inventário ou um status 200 claro para que o front saiba que o item foi destruído no banco. Pesquise os Controllers e DTOs relacionados. Pare e aguarde minha validação do código
+
+olhe para NpcShopResponseFTO.java e InventoryItemResponseDTO.java

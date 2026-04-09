@@ -130,7 +130,14 @@ public class BattleService {
         return p.getInventory().stream()
                 .filter(i -> Boolean.TRUE.equals(i.getIsEquipped()))
                 .findFirst()
-                .map(i -> i.getName() + " (ATK " + i.getItemDefinition().getStats().getAttack() + ")")
+                .map(i -> {
+                    if (i.getItemDefinition() == null || i.getItemDefinition().getStats() == null) {
+                        log.warn("[BattleService] Item equipado sem itemDefinition/stats: itemId={}", i.getId());
+                        return i.getName() != null ? i.getName() : "Arma Desconhecida";
+                    }
+                    Integer atk = i.getItemDefinition().getStats().getAttack();
+                    return i.getName() + " (ATK " + (atk != null ? atk : 0) + ")";
+                })
                 .orElse("Punhos Nus");
     }
 }

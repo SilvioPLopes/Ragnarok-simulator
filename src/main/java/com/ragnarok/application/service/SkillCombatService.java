@@ -79,6 +79,12 @@ public class SkillCombatService {
 
         PlayerEntity playerEntity = playerRepository.findById(playerId)
                 .orElseThrow(() -> new GameException("Player not found: " + playerId));
+
+        if (playerEntity.getHpCurrent() != null && playerEntity.getHpCurrent() <= 0) {
+            log.warn("[SkillCombat] Player morto tentou usar skill: playerId={}, skill={}", playerId, aegisName);
+            throw new com.ragnarok.domain.exception.PlayerDeadException();
+        }
+
         int spAtual = playerEntity.getSpCurrent() != null ? playerEntity.getSpCurrent() : 0;
         int spCusto = skill.getSpCost() != null ? skill.getSpCost() : 10;
         int skillLevel = playerSkill.getCurrentLevel();

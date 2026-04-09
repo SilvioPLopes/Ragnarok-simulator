@@ -3,6 +3,8 @@ package com.ragnarok.application.service;
 import com.ragnarok.domain.exception.GameException;
 import com.ragnarok.infrastructure.antifraude.FraudClient;
 import com.ragnarok.infrastructure.persistence.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,6 +12,8 @@ import java.util.List;
 
 @Service
 public class CashShopService {
+
+    private static final Logger log = LoggerFactory.getLogger(CashShopService.class);
 
     private final CashShopItemRepository cashShopItemRepository;
     private final AccountRepository accountRepository;
@@ -38,6 +42,7 @@ public class CashShopService {
 
     @Transactional
     public void buy(Long accountId, Long cashShopItemId, Long playerId) {
+        log.info("[CashShop] Compra iniciada: accountId={}, cashShopItemId={}, playerId={}", accountId, cashShopItemId, playerId);
         CashShopItemEntity shopItem = cashShopItemRepository.findById(cashShopItemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item nao encontrado na loja cash"));
         if (!shopItem.isActive()) {
@@ -46,6 +51,7 @@ public class CashShopService {
         AccountEntity account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("Conta nao encontrada"));
         if (account.getCashPoints() < shopItem.getCashPrice()) {
+            log.warn("[CashShop] Cash Points insuficientes: accountId={}, necessario={}, disponivel={}", accountId, shopItem.getCashPrice(), account.getCashPoints());
             throw new IllegalStateException("Cash Points insuficientes");
         }
 
@@ -53,14 +59,17 @@ public class CashShopService {
         FraudClient.FraudDecision decision = fraudClient.checkMarketPurchase(
                 playerId, shopItem.getItemId(), 1L, totalActive);
         if (decision.isBlocked()) {
+            log.warn("[CashShop] Compra bloqueada por antifraude: playerId={}, itemId={}", playerId, shopItem.getItemId());
             throw new GameException("Compra bloqueada pelo sistema antifraude");
         }
 
         account.setCashPoints(account.getCashPoints() - shopItem.getCashPrice());
         accountRepository.save(account);
 
-        PlayerEntity player = playerRepository.findById(playerId).orElseThrow();
-        ItemEntity item = itemRepository.findById(shopItem.getItemId()).orElseThrow();
+        PlayerEntity player = playerRepository.findById(playerId)
+                .orElseThrow(() -> new IllegalArgumentException("Player nao encontrado: " + playerId));
+        ItemEntity item = itemRepository.findById(shopItem.getItemId())
+                .orElseThrow(() -> new IllegalStateException("Item de catalogo nao encontrado no banco: itemId=" + shopItem.getItemId()));
 
         List<PlayerItemEntity> existing = playerItemRepository.findByPlayerIdAndItemId(playerId, item.getId());
         if (!existing.isEmpty()) {
@@ -74,5 +83,6 @@ public class CashShopService {
             pi.setEquipped(false);
             playerItemRepository.save(pi);
         }
+        log.info("[CashShop] Compra concluida: accountId={}, playerId={}, itemId={}, cashGasto={}", accountId, playerId, item.getId(), shopItem.getCashPrice());
     }
 }

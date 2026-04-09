@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface PlayerSkillRepository extends JpaRepository<PlayerSkillEntity, UUID> {
     List<PlayerSkillEntity> findByPlayerId(Long playerId);
     Optional<PlayerSkillEntity> findByPlayerIdAndSkillId(Long playerId, String skillId);
+
+    void deleteByPlayerId(Long playerId);
 }

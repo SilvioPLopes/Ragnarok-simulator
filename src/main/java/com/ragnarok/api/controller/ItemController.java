@@ -66,6 +66,8 @@ public class ItemController {
                 pi.getItem() != null && pi.getItem().getType() != null
                         ? pi.getItem().getType().name() : "UNKNOWN",
                 pi.getAmount(),
-                pi.getEquipped());
+                pi.getEquipped(),
+                pi.getItem() != null ? pi.getItem().getImgUrl() : null,
+                pi.getItem() != null ? pi.getItem().getDescription() : null);
     }
 }
