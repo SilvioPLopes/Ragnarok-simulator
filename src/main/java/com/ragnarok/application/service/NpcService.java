@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class NpcService {
@@ -68,7 +69,16 @@ public class NpcService {
             throw new GameException("Este NPC não é uma loja");
         }
         List<NpcShopItemEntity> items = shopItemRepository.findByNpcId(npcId);
-        List<NpcShopResponseDTO.ShopItemDTO> dtos = items.stream()
+        // Fallback: navi_ NPCs have type=SHOP but items are on the shop_ NPC at same coords
+        if (items.isEmpty()) {
+            List<NpcEntity> nearby = npcRepository.findShopNpcsByProximity(
+                    npc.getMapName(), npc.getX(), npc.getY(), 5);
+            if (!nearby.isEmpty()) {
+                items = shopItemRepository.findByNpcId(nearby.get(0).getId());
+            }
+        }
+        List<NpcShopItemEntity> finalItems = items;
+        List<NpcShopResponseDTO.ShopItemDTO> dtos = finalItems.stream()
                 .map(si -> {
                     int price = si.getPrice() == -1 ? resolveItemPrice(si.getItemId()) : si.getPrice();
                     String imgUrl = itemRepository.findById(si.getItemId())
@@ -86,7 +96,15 @@ public class NpcService {
         if (npc.getType() != NpcType.SHOP) {
             throw new GameException("Este NPC não é uma loja");
         }
-        NpcShopItemEntity shopItem = shopItemRepository.findByNpcIdAndItemId(npcId, itemId)
+        // Fallback: navi_ NPCs have type=SHOP but items are on the shop_ NPC at same coords
+        Long shopNpcId = npcId;
+        if (shopItemRepository.findByNpcIdAndItemId(npcId, itemId).isEmpty()) {
+            List<NpcEntity> nearby = npcRepository.findShopNpcsByProximity(
+                    npc.getMapName(), npc.getX(), npc.getY(), 5);
+            if (!nearby.isEmpty()) shopNpcId = nearby.get(0).getId();
+        }
+        final Long resolvedShopNpcId = shopNpcId;
+        NpcShopItemEntity shopItem = shopItemRepository.findByNpcIdAndItemId(resolvedShopNpcId, itemId)
                 .orElseThrow(() -> new GameException("Item não disponível nesta loja"));
 
         PlayerEntity player = findPlayer(playerId);
@@ -175,20 +193,19 @@ public class NpcService {
         NpcEntity npc = npcRepository.findById(npcId)
                 .orElseThrow(() -> new IllegalArgumentException("NPC não encontrado: " + npcId));
 
-        return npcDialogRepository.findByNpcId(npcId)
-                .map(entity -> {
-                    try {
-                        List<NpcDialogNode> nodes = objectMapper.readValue(
-                                entity.getNodes(),
-                                objectMapper.getTypeFactory()
-                                        .constructCollectionType(List.class, NpcDialogNode.class));
-                        return new NpcDialogTreeDTO(nodes);
-                    } catch (JsonProcessingException e) {
-                        log.warn("Erro ao desserializar nodes NPC id={}: {}", npcId, e.getMessage());
-                        return new NpcDialogTreeDTO(List.of());
-                    }
-                })
-                .orElseGet(() -> buildLegacyTree(npc));
+        Optional<NpcDialogEntity> dialogEntry = npcDialogRepository.findByNpcId(npcId);
+        if (dialogEntry.isPresent()) {
+            try {
+                List<NpcDialogNode> nodes = objectMapper.readValue(
+                        dialogEntry.get().getNodes(),
+                        objectMapper.getTypeFactory()
+                                .constructCollectionType(List.class, NpcDialogNode.class));
+                return new NpcDialogTreeDTO(nodes);
+            } catch (JsonProcessingException e) {
+                log.warn("Erro ao desserializar nodes NPC id={}, usando fallback legado: {}", npcId, e.getMessage());
+            }
+        }
+        return buildLegacyTree(npc);
     }
 
     /** Fallback: constrói árvore simples a partir do campo legado npcs.dialog. */

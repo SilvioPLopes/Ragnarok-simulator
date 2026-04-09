@@ -2,6 +2,7 @@ package com.ragnarok.domain.model;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,7 @@ public sealed interface NpcDialogNode
      * Balão de texto. "speaker" é o nome entre [colchetes] do primeiro mes(),
      * extraído e removido de texts. "next" é o índice do próximo nó.
      */
+    @JsonTypeName("dialog")
     record DialogNode(
             String       speaker,
             List<String> texts,
@@ -35,6 +37,7 @@ public sealed interface NpcDialogNode
      * Cada choice.next pode ser um índice numérico (como string) ou
      * "__shop__" / "__close__" (gerados pelo frontend para shops).
      */
+    @JsonTypeName("menu")
     record MenuNode(
             List<String>   texts,
             List<Choice>   choices
@@ -48,6 +51,7 @@ public sealed interface NpcDialogNode
      * action: "close" | "heal" | "warp" | "getitem"
      * params: mapa com parâmetros dependentes da ação (pode ser null).
      */
+    @JsonTypeName("action")
     record ActionNode(
             String              action,
             Map<String, Object> params

@@ -98,7 +98,11 @@ public class RathenaDialogPopulator {
             // Salvar árvore estruturada em npc_dialogs
             if (!data.nodes().isEmpty()) {
                 try {
-                    String nodesJson = objectMapper.writeValueAsString(data.nodes());
+                    // Usar writer tipado para que @JsonTypeInfo inclua o campo "type" em cada nó
+                    String nodesJson = objectMapper.writerFor(
+                            objectMapper.getTypeFactory()
+                                    .constructCollectionType(java.util.List.class, com.ragnarok.domain.model.NpcDialogNode.class)
+                    ).writeValueAsString(data.nodes());
                     npcDialogRepository.deleteByNpcId(npc.getId());
                     NpcDialogEntity dialogEntity = new NpcDialogEntity();
                     dialogEntity.setNpcId(npc.getId());

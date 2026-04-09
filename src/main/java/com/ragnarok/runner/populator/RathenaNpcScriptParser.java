@@ -20,10 +20,13 @@ public class RathenaNpcScriptParser {
 
     private static final Logger log = LoggerFactory.getLogger(RathenaNpcScriptParser.class);
 
-    // Linha de definição: mapName,x,y,dir<TAB>script<TAB>Name#label<TAB>spriteId,{
+    // Linha de definição: mapName,x,y,dir<TAB>script<TAB>Name com espaços#label<TAB>spriteId[,extras]*,{
+    // Usa \t como delimitador entre campos para suportar nomes com espaços (ex: "Drunken Old Man")
+    // spriteId pode ser numérico (84), string (1_M_03) ou negativo (-1)
+    // extras são opcionais: viewrange, idleType, etc. (ex: 45,1,1,{)
     // Ignora templates ("-") e requer coordenadas numéricas no início
     private static final Pattern SCRIPT_LINE = Pattern.compile(
-            "^([\\w@]+),(\\d+),(\\d+),\\d+\\s+script\\s+(\\S+)\\s+(\\d+),\\{\\s*$"
+            "^([\\w@]+),(\\d+),(\\d+),\\d+\\t+script\\t+(.+?)\\t+([-\\w@]+(?:,[-\\d]+)*),\\{\\s*$"
     );
 
     // mes "texto";
@@ -116,8 +119,12 @@ public class RathenaNpcScriptParser {
             String mapName  = m.group(1);
             int    x        = Integer.parseInt(m.group(2));
             int    y        = Integer.parseInt(m.group(3));
-            String rawLabel = m.group(4); // Name#label
-            int    spriteId = Integer.parseInt(m.group(5));
+            String rawLabel = m.group(4); // Name com possíveis espaços + #label
+            // group(5) = "spriteId[,viewrange[,idleType...]]" — extrair só o primeiro token
+            String spriteToken = m.group(5).split(",")[0];
+            int spriteId;
+            try { spriteId = Integer.parseInt(spriteToken); }
+            catch (NumberFormatException e) { spriteId = 0; } // string sprite IDs (1_M_03, 4W_SAILOR, -1, etc.)
 
             String name = rawLabel.contains("#")
                     ? rawLabel.substring(0, rawLabel.indexOf('#'))

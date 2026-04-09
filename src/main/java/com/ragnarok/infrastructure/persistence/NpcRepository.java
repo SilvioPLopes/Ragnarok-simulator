@@ -34,6 +34,18 @@ public interface NpcRepository extends JpaRepository<NpcEntity, Long> {
             @Param("y") int y,
             @Param("radius") int radius);
 
+    /** Encontra o NPC shop_ na mesma coordenada — fallback quando navi_ NPC não tem itens próprios. */
+    @Query("SELECT n FROM NpcEntity n WHERE n.mapName = :mapName " +
+           "AND n.seedId LIKE 'shop_%' " +
+           "AND ABS(n.x - :x) <= :radius " +
+           "AND ABS(n.y - :y) <= :radius " +
+           "ORDER BY ABS(n.x - :x) + ABS(n.y - :y) ASC")
+    List<NpcEntity> findShopNpcsByProximity(
+            @Param("mapName") String mapName,
+            @Param("x") int x,
+            @Param("y") int y,
+            @Param("radius") int radius);
+
     /** Corrige NPCs que têm itens em npc_shop_items mas type != SHOP. */
     @Modifying
     @Transactional
