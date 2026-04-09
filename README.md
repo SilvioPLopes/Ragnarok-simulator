@@ -26,7 +26,7 @@ The core engine of a Ragnarok Online emulation and data-management system built 
 | Size Modifiers | Operational | Weapon vs. Small/Medium/Large with real game table |
 | Class Change | Operational | NOVICE → Tier1 → Tier2 → Tier3 with job level validation |
 | Auto Startup | Operational | `StartupDataLoader` populates all static tables on boot |
-| Schema Management | Operational | Flyway V1–V7 migrations applied; Hibernate validates on startup; next migration must be **V8** |
+| Schema Management | Operational | Flyway V1–V8 migrations applied; Hibernate validates on startup; next migration must be **V9** |
 | JWT Authentication | Operational | `JwtFilter` (`@Order(1)`) validates `Authorization: Bearer` on all `/api/*` routes; public paths: `/api/accounts/register`, `/api/accounts/login` |
 | CORS Configuration | Operational | `FilterRegistrationBean<CorsFilter>` at `HIGHEST_PRECEDENCE` — allows `http://localhost:3000` (all methods/headers) |
 | Account System | Operational | `AccountController`: register + login returning `{token, accountId}`; `AccountService.LoginResult` record |
@@ -38,7 +38,7 @@ The core engine of a Ragnarok Online emulation and data-management system built 
 | Spring Events | Operational | `BattleService` + `SkillCombatService` publish `MonsterKilledEvent` / `PlayerDiedEvent`; `BattleEventHandler` handles loot, XP, resurrection |
 | NPC System | Operational | Map-aware NPCs (SHOP / HEAL / WARP / NPC types); `NpcSeedLoader` seeds Prontera NPCs from classpath JSON on startup; ownership-guarded buy/heal/warp; Flyway V2 migration |
 | `BattleResponseDTO` | Operational | Exposes `monsterHpRemaining: Integer` — front-end can loop attacks until `monsterHpRemaining == 0` |
-| bRO Client Data Pipeline | Operational | One-time populator suite (guarded by `ro.assets.run-populator=true`): item names/sprites, NPC sprites, map display names, NPC coordinates + **direct spriteUrl**, portals, NPC shop inventories + **shop spriteUrl**, skill descriptions/icons, monster spawn validation, **NPC dialogs from rAthena scripts** — 9 steps in `ClientDataRunner @Order(5)` |
+| bRO Client Data Pipeline | Operational | One-time populator suite (guarded by `ro.assets.run-populator=true`): item names/sprites, NPC sprites, map display names, NPC coordinates + **direct spriteUrl**, portals, NPC shop inventories + **shop spriteUrl**, skill descriptions/icons, monster spawn validation, **NPC structured dialog trees from rAthena scripts (2614 NPCs)** — 9 steps in `ClientDataRunner @Order(5)` |
 | Skill Enrichment | Operational | `SkillClientDataPopulator` reads `skillinfolist.lua` + `skilldescript.lua` → `skills.description` (TEXT) + `skills.img_url` (VARCHAR 500); Flyway V5 migration |
 | Map Display Names | Operational | `NaviMapPopulator` reads `navi_map_br.lua` → `maps.display_name`; `MapInfoResponseDTO` exposes `displayName`; Flyway V6 migration |
 | NPC Client Coordinates | Operational | `NaviNpcPopulator` reads `navi_npc_br.lua` → real x/y coordinates, spriteRef, and **spriteUrl** (jobId from field [3], no npcidentity.lua lookup needed) |
@@ -46,7 +46,8 @@ The core engine of a Ragnarok Online emulation and data-management system built 
 | NPC Shop Import | Operational | `NpcShopImporter` reads `rathena/shops.txt` (classpath) → populates `npc_shop_items` |
 | NpcSpritePopulator | Operational | Resolves seed NPC spriteRef → JT constant → jobId for seed NPCs only (kafra, warp_portal, npc_generic, shop_generic); URL format `/ro-assets/output-npcs/{jobId}/0-0.png` |
 | NPC Shop Sprites | Operational | `NpcShopImporter` extracts `spriteId` from `shops.txt` col[3] first token → sets `sprite_url` on shop NPCs; always re-applies sprite URLs even when item threshold is reached |
-| NPC Dialogs | Operational | `RathenaNpcScriptParser` + `RathenaDialogPopulator` parse `rathena-master/npc/cities/*.txt`, `kafras/`, `jobs/`, `other/` → `npcs.dialog TEXT`; match by `(mapName, x, y)`; `GET /api/npcs/{npcId}/dialog` endpoint; Flyway V7 migration |
+| NPC Dialogs | Operational | **2614 NPCs with structured dialog trees** (`npc_dialogs` JSONB table — Flyway V8). `RathenaNpcScriptParser` recursive scan of `rathena-master/npc/` (excludes `scripts_custom/`, `re/`, `pre-re/`) parses `mes`, `next`, `close`, `select`, `switch/case`, `heal`, `getitem` → typed node trees (`DialogNode`, `MenuNode`, `ActionNode`). Match strategy: exact coords → name+map → proximity 5 tiles. `GET /api/npcs/{npcId}/dialog` returns `{ nodes: [...] }`. Fallback: NPCs without a dialog tree use `npcs.dialog` text field. |
+| NPC Shops | Operational | **Shops functional with proximity fallback.** `navi_` NPCs promoted to `SHOP` type via `fixShopTypes()`. `NpcService.getShop()` and `buyFromNpc()` fall back to nearest `shop_` NPC within 5 tiles when the clicked NPC has no directly linked `npc_shop_items`. |
 | Testcontainers | Operational | All integration tests use an ephemeral PostgreSQL container — no local DB required for `./mvnw test` |
 | Test Coverage | **286+ tests** | Unit + Integration — zero failures (JaCoCo ≥ 85% line / ≥ 62% branch) |
 
@@ -282,6 +283,8 @@ Schema is managed by **Flyway** (`db/migration/`). Hibernate validates on startu
 | V4 | `V4__missing_portal_exits.sql` | INSERT portal exits for 7 soft-locked maps |
 | V5 | `V5__skill_enrichment.sql` | `ADD COLUMN description TEXT, img_url VARCHAR(500)` to `skills` |
 | V6 | `V6__map_display_name.sql` | `ADD COLUMN display_name VARCHAR(255)` to `maps` |
+| V7 | `V7__npc_dialog.sql` | `ADD COLUMN dialog TEXT` to `npcs` (legacy flat text) |
+| V8 | `V8__npc_dialogs_table.sql` | `CREATE TABLE IF NOT EXISTS npc_dialogs (id, npc_id FK, nodes JSONB)` — structured dialog trees |
 
 | Table | Source | Description |
 |---|---|---|
@@ -301,6 +304,7 @@ Schema is managed by **Flyway** (`db/migration/`). Hibernate validates on startu
 | `npcs` | NpcSeedLoader + NaviNpcPopulator | Map-aware NPCs: `seed_id` (idempotency key), `name`, `type`, `x`, `y`, `map_name`, `sprite_ref`, `sprite_url` — coordinates enriched from `navi_npc_br.lua`; `sprite_url` set by `NpcSpritePopulator` |
 | `npc_shop_items` | NpcSeedLoader + NpcShopImporter | Items sold per NPC shop: `npc_id` FK, `item_id`, `item_name`, `price` (`-1` = resolved from `items.price`); enriched by `NpcShopImporter` from `rathena/shops.txt` |
 | `npc_warp_destinations` | NpcSeedLoader (startup) | Warp targets per NPC: `npc_id` FK, `map_name`, `x`, `y` |
+| `npc_dialogs` | RathenaDialogPopulator | Structured dialog trees: `npc_id` FK (unique), `nodes` JSONB — **2614 NPCs** populated from rAthena scripts |
 
 ### Resetting database data
 
@@ -658,7 +662,9 @@ com.ragnarok
 - **Suíte de testes green (286 testes):** corrigidos 7 erros de compilação (`BattleService.AttackResult` record em vez de `String` nos mocks), `PlayerControllerTest` completado com `@MockitoBean ClassChangeService`, `AccountServiceTest` corrigido para `GameException` nas credenciais inválidas, `PlayerServiceTest` com `@Transactional` + cleanup de dados de teste, `MonsterCatalogServiceTest` com DELETE em `map_monsters` antes de `monsters`, `RagnarokTerminalRunner` corrigido para usar `.message()` no retorno de `realizarAtaque`
 - **`BattleResponseDTO.monsterHpRemaining`** — `POST /api/battle/attack` now returns `{message, monsterHpRemaining: Integer}`; front-end can loop attacks until `monsterHpRemaining == 0` without polling
 - **NPC system (Alt-6.2):** `NpcEntity`, `NpcShopItemEntity`, `NpcWarpDestinationEntity`; `NpcType` enum (SHOP, HEAL, WARP, NPC); `NpcService` with Zenny-validated buy, full HP/SP heal, and map-aware warp; `NpcController` at `/api/maps/{mapName}/npcs` and `/api/npcs/{npcId}/*` with JWT ownership guard on all mutation endpoints; `NpcSeedLoader` (`@Order(4)`) seeds `prontera_npcs_seed.json` idempotently on startup; Flyway V2 migration adds 3 new tables
-- **bRO client data migration (Alt-6.2):** `ClientDataRunner` (`@Order(5)`) orchestrates 8 parsers/populators from bRO lua files — `ItemInfoLuaParser` (EUC-KR + lua escape + color code stripping), `NpcSpritePopulator` (expanded dynamic match via `JT_<SPRITEREF>`, URL bug fixed), `NaviMapPopulator` (display names → `maps.display_name`, V6), `NaviNpcPopulator` (real NPC coordinates from `navi_npc_br.lua`), `NaviLinkPopulator` (client portal data), `NpcShopImporter` (rAthena `shops.txt` → `npc_shop_items`), `SkillClientDataPopulator` (descriptions + icons → V5 columns), `NaviMobPopulator` (spawn validation); 7 new `ro.assets.*` properties; Flyway V5 + V6 migrations
+- **bRO client data migration (Alt-6.2):** `ClientDataRunner` (`@Order(5)`) orchestrates 9 parsers/populators from bRO lua files — `ItemInfoLuaParser` (EUC-KR + lua escape + color code stripping), `NpcSpritePopulator` (expanded dynamic match via `JT_<SPRITEREF>`, URL bug fixed), `NaviMapPopulator` (display names → `maps.display_name`, V6), `NaviNpcPopulator` (real NPC coordinates from `navi_npc_br.lua`), `NaviLinkPopulator` (client portal data), `NpcShopImporter` (rAthena `shops.txt` → `npc_shop_items` + `fixShopTypes()`), `SkillClientDataPopulator` (descriptions + icons → V5 columns), `NaviMobPopulator` (spawn validation), `RathenaDialogPopulator` (rAthena NPC scripts → `npc_dialogs` JSONB trees, **2614 NPCs**); Flyway V5–V8 migrations
+- **NPC dialog system (Alt-6.2.2):** `RathenaNpcScriptParser` full recursive scan with TAB-aware regex (supports names with spaces, string sprite IDs, multiple viewrange fields); `NpcDialogNode` sealed interface with Jackson polymorphism (`@JsonTypeInfo` + `@JsonTypeName`); `npc_dialogs` table (V8) stores typed trees; `NpcService.getDialog()` serves trees with legacy `npcs.dialog` fallback; 3-stage NPC matching (coords → name → proximity 5 tiles)
+- **NPC shop proximity fallback (Alt-6.2.2):** `NpcService.getShop()` and `buyFromNpc()` fall back to nearest `shop_` NPC within 5 tiles when the clicked `navi_` NPC has no directly linked `npc_shop_items`; `NpcRepository.findShopNpcsByProximity()` added
 
 ### Backlog
 
